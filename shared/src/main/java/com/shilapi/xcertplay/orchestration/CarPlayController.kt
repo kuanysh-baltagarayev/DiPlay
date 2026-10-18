@@ -287,6 +287,7 @@ class CarPlayController(
     @Volatile private var instantBluetoothLink: InstantBluetoothLink? = null
     @Volatile private var firstTcpWatchdog: FirstTcpWatchdog? = null
     @Volatile private var wiredStartWatchdog: WiredStartWatchdog? = null
+    @Volatile private var wiredSessionActive = false
     @Volatile private var wirelessPublishedAddress: InetAddress? = null
     @Volatile private var wirelessAlternateAddress: InetAddress? = null
     @Volatile private var wirelessAddressRecovery: HotspotAddressRecovery? = null
@@ -347,6 +348,7 @@ class CarPlayController(
             uiListener?.onCornerMask(session, png, displayWidth)
         }
         override fun onSessionActive(session: AirPlaySession) {
+            wiredSessionActive = true
             wiredStartWatchdog?.sessionActive()
             if (currentCornerMask?.session !== session) currentCornerMask = null
             val replacement = activeSession !== session
@@ -2323,6 +2325,7 @@ class CarPlayController(
                 deviceIdentifier = ncmHostMac.macString(),
             )
             onStatus(CarPlayStatus.RunningControl)
+            wiredSessionActive = false
             lateinit var startWatchdog: WiredStartWatchdog
             startWatchdog = WiredStartWatchdog(
                 schedule = { delay, action ->
@@ -2357,11 +2360,23 @@ class CarPlayController(
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
-                    if (message.startsWith(START_SESSION_PROGRESS)) {
+                    if (message == Iap2WiredControlClient.START_SESSION_AGAIN_PROGRESS) {
+                        startWatchdog.startSessionSentAgain()
+                    } else if (message.startsWith(START_SESSION_PROGRESS)) {
                         wiredDeviceName?.let(WiredSessionMemory::started)
                         startWatchdog.startSessionSent()
                     }
                     debugLog("wired $message")
+                },
+                startSessionAgain = {
+                    val opened = ncm.linkOpenedAtNanos
+                    WiredStartAgain.decide(
+                        nowNanos = System.nanoTime(),
+                        linkOpenedAtNanos = opened,
+                        sessionActive = wiredSessionActive,
+                        connectionAttemptSinceLinkOpened =
+                            opened != null && ncm.connectionAttemptSince(endpoint.airPlayPort, opened),
+                    )
                 },
             )
             onStatus(
