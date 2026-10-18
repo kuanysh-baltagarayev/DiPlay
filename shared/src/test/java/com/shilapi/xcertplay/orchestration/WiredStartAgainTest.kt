@@ -9,8 +9,8 @@ import org.junit.Test
 class WiredStartAgainTest {
     private val second = 1_000_000_000L
 
-    private fun decide(now: Long, opened: Long?, active: Boolean = false, tried: Boolean = false) =
-        WiredStartAgain.decide(now, opened, active, tried)
+    private fun decide(now: Long, opened: Long?, active: Boolean = false, tried: Boolean = false, sent: Long = 0) =
+        WiredStartAgain.decide(now, sent, opened, active, tried)
 
     @Test fun nothingHappensWhileTheIphoneKeepsTheLinkClosed() {
         assertEquals(StartAgain.WAIT, decide(now = 40 * second, opened = null))
@@ -23,6 +23,11 @@ class WiredStartAgainTest {
 
     @Test fun anIphoneThatConnectsAfterTheLinkOpensIsLeftAlone() {
         assertEquals(StartAgain.DONE, decide(now = 22 * second, opened = 20 * second, tried = true))
+    }
+
+    // #888, #890: the link was open before the request, so the iPhone's own attempt got through.
+    @Test fun aLinkOpenBeforeTheRequestIsNotAskedAgain() {
+        assertEquals(StartAgain.DONE, decide(now = 10 * second, opened = 3 * second, sent = 5 * second))
     }
 
     @Test fun anActiveSessionEndsTheQuestion() {
