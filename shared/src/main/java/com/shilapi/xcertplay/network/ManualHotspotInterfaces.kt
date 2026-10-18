@@ -85,7 +85,7 @@ internal class ManualHotspotInterfaces(
             explicit != null -> (observed ?: emptySet()) + explicit
             // Only when the hotspot is reported on and no tethered Wi-Fi interface exists. An
             // unobservable set stays unobservable, so the fallback evidence keeps working.
-            apEnabled == true && observed.isNullOrEmpty() -> {
+            apEnabled == true && observed?.isEmpty() == true -> {
                 val discovered = hotspotCarrierCandidates(interfaces, upstreams.orEmpty(), defaultInterface)
                 if (discovered.isEmpty()) observed else discovered
             }
