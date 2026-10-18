@@ -94,7 +94,7 @@
     <string name="resolution_handshake_prefix">ネゴシエーション解像度：\u0020</string>
     <string name="safe_area_full_screen_at">セーフエリア：全画面\u0020</string>
     <string name="safe_area_mapping_summary">セーフエリア：%5$d×%6$d内の(%3$d, %4$d)に%1$d×%2$d</string>
-    <string name="settings_android9_compat">Android 9（API 28）では以下の設定が使えず、非表示になります。\n• Wi-Fi P2P（5 GHz）：代わりにLocalOnlyHotspotを使用します。\n• HEVCソフトウェアデコーダー：代わりにハードウェアデコードを使用します。</string>
+    <string name="settings_android9_compat">Android 9（API 28）では以下の設定が使えず、非表示になります。\n• HEVCソフトウェアデコーダー：代わりにハードウェアデコードを使用します。</string>
     <string name="settings_mfi_address_hint">アドレスはhttp://またはhttps://で始めてください。トークンは任意で、AuthorizationのBearerトークンとして送信されます。</string>
     <string name="a_familiar_drive">いつもの操作を車でも。</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">以前のWi-Fi Direct接続が残っています。接続するにはリセットしてください。</string>

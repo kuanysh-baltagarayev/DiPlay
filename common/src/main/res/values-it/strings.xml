@@ -89,7 +89,7 @@
     <string name="resolution_handshake_prefix">Risoluzione dell’handshake:\u0020</string>
     <string name="safe_area_full_screen_at">Area sicura: schermo intero a\u0020</string>
     <string name="safe_area_mapping_summary">Area sicura: %1$d x %2$d a (%3$d, %4$d) in %5$d x %6$d</string>
-    <string name="settings_android9_compat">Le seguenti impostazioni non sono disponibili e sono nascoste su Android 9 (API 28):\n• Wi-Fi P2P (5 GHz) — al suo posto viene usato LocalOnlyHotspot.\n• Decoder HEVC software — al suo posto viene usata la decodifica hardware.</string>
+    <string name="settings_android9_compat">Le seguenti impostazioni non sono disponibili e sono nascoste su Android 9 (API 28):\n• Decoder HEVC software — al suo posto viene usata la decodifica hardware.</string>
     <string name="settings_mfi_address_hint">L’indirizzo deve iniziare con http:// o https://. Il token è facoltativo e viene inviato come bearer token di Authorization.</string>
     <string name="language_section_title">Lingua</string>
     <string name="language_app_language">Lingua dell’app</string>

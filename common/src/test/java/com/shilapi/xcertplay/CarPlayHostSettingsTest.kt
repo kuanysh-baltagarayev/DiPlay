@@ -103,6 +103,18 @@ class CarPlayHostSettingsTest {
             views(bydMenu).filterIsInstance<Switch>().any { it.contentDescription == description })
     }
 
+    @Test
+    @Config(sdk = [28])
+    fun wifiDirectStaysAChoiceBeforeAndroid10() {
+        // Wi-Fi Direct starts on Android 9 and earlier since 2db15060, and Settings offers it there.
+        val menu = invoke("buildSettingsMenu") as View
+        val modes = views(menu).filterIsInstance<RadioButton>().filter { it.tag is WirelessHotspotMode }.toList()
+        assertEquals(listOf(WirelessHotspotMode.MANUAL, WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.EXISTING_WIFI),
+            modes.map { it.tag })
+        assertTrue(modes.single { it.tag == WirelessHotspotMode.WIFI_P2P }.isChecked)
+        assertFalse(views(menu).filterIsInstance<TextView>().any { it.text.contains("LocalOnlyHotspot") })
+    }
+
     @Test fun disabledGesturePersistsAndDoesNotOpenTheMenu() {
         AirPlayPersistence.saveSettingsGestureFingers(activity, 0)
         invoke("loadPersistedSettings")

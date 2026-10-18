@@ -87,7 +87,7 @@
     <string name="audio_stream_unavailable">音訊串流類型 %1$d 在此無法使用（狀態=%2$s）</string>
     <string name="resolution_handshake_prefix">交握解析度：</string>
     <string name="safe_area_full_screen_at">安全區域：全螢幕，</string>
-    <string name="settings_android9_compat">以下設定在 Android 9（API 28）上無法使用且已隱藏：\n• Wi-Fi P2P（5 GHz）— 將改用 LocalOnlyHotspot。\n• HEVC 軟體解碼器 — 將改用硬體解碼。</string>
+    <string name="settings_android9_compat">以下設定在 Android 9（API 28）上無法使用且已隱藏：\n• HEVC 軟體解碼器 — 將改用硬體解碼。</string>
     <string name="settings_mfi_address_hint">位址必須以 http\:// 或 https\:// 開頭。權杖為選用項目，將以 Authorization bearer token 傳送。</string>
     <string name="a_familiar_drive">熟悉的駕駛體驗。</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">先前的 Wi-Fi Direct 連線仍在執行。請重設後再連線。</string>
