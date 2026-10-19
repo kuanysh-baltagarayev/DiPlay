@@ -151,6 +151,8 @@ object AirPlayInfoPlist {
         // Retain Opus whenever platform or bundled software encoding is usable. PCM-only wireless
         // negotiation is not a universal fallback; a missing MediaCodec encoder is insufficient.
         val wirelessInput = if (microphone) (if (microphoneOpus) pcmMono or opus else pcmMono) else null
+        // With calls at their own rate, offer the call microphone at the same vocoder rates too.
+        val telephonyInput = if (callAtCallRate && microphone) 0x154 else wirelessInput
 
         return listOf(
             format(100, "compatibility", pcm, pcmInput),
@@ -158,7 +160,7 @@ object AirPlayInfoPlist {
             format(100, "default", speech or opus, wirelessInput),
             format(100, "alert", speech or opus),
             format(100, "media", pcm),
-            format(100, "telephony", telephonyOutput, wirelessInput),
+            format(100, "telephony", telephonyOutput, telephonyInput),
             format(100, "speechRecognition", pcmMono or opus, wirelessInput),
             format(101, "default", speech or opus),
             format(102, "media", aacLc),
