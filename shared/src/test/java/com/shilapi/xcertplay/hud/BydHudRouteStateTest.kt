@@ -187,6 +187,35 @@ class BydHudRouteStateTest {
     }
 
     @Test
+    fun `the second listed maneuver is the next one`() {
+        val state = BydHudRouteState()
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 0), tlv(0x03, 2)))
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 1), tlv(0x03, 1)))
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, tlvs(tlv(0x01, 1), tlv(0x0d, 0, 0, 0, 1)))
+        assertEquals(1, state.currentApple()!!.nextType)
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, tlvs(tlv(0x01, 1), tlv(0x0d, 0, 1)))
+        assertNull(state.currentApple()!!.nextType)
+    }
+
+    @Test
+    fun `a delayed end keeps maneuvers a new route sent first`() {
+        var now = 0L
+        val state = BydHudRouteState({ now }, endDelayNs = 3_000_000_000L)
+        // New route: its maneuvers, then the old route's NoRouteSet, then its guidance.
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 4), tlv(0x03, 1)))
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, tlvs(tlv(0x01, 0)))
+        now = 100_000_000L
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, tlvs(tlv(0x01, 1), tlv(0x0d, 0, 4)))
+        now = 5_000_000_000L
+        assertEquals(1, state.currentApple()!!.type)
+        // A real end clears after the delay.
+        state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, tlvs(tlv(0x01, 2)))
+        assertEquals(1, state.currentApple()!!.type)
+        now = 8_000_000_000L
+        assertNull(state.currentApple())
+    }
+
+    @Test
     fun `roundabout exit has blank arrow and exit icon`() {
         val state = BydHudRouteState()
         state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 0), tlv(0x03, 29)))

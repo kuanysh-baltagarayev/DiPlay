@@ -21,6 +21,8 @@ object CarPlayGlance {
         val arrivalEpochSeconds: Long? = null,
         val remainingSeconds: Long? = null,
         val remainingMeters: Long? = null,
+        /** The maneuver after [maneuverType], when the iPhone lists one. */
+        val nextManeuverType: Int? = null,
         val song: String? = null,
         val playing: Boolean = false,
     )
@@ -28,10 +30,12 @@ object CarPlayGlance {
     private val route = BydHudRouteState()
     /**
      * The same guidance for a windshield HUD: the iPhone sends nothing while the car stands, so the
-     * turn stays until the route ends or CarPlay disconnects, and the street falls back to the
-     * maneuver description.
+     * turn stays until the route ends or CarPlay disconnects; the end waits a little for the next
+     * route, and the street falls back to the maneuver description.
      */
-    private val hudRoute = BydHudRouteState(staleRouteNs = HUD_STALE_ROUTE_NS, descriptionAsRoad = true)
+    private val hudRoute = BydHudRouteState(
+        staleRouteNs = HUD_STALE_ROUTE_NS, descriptionAsRoad = true, endDelayNs = HUD_END_DELAY_NS,
+    )
     private val song = ClusterSongState()
     private var connected = false
     private var last = Snapshot()
@@ -96,10 +100,12 @@ object CarPlayGlance {
             arrivalEpochSeconds = maneuver?.arrivalEpochSeconds,
             remainingSeconds = maneuver?.remainingSeconds,
             remainingMeters = maneuver?.remainingMeters,
+            nextManeuverType = maneuver?.nextType,
             song = current?.text,
             playing = current?.playing ?: false,
         )
     }
 
     private const val HUD_STALE_ROUTE_NS = 30 * 60 * 1_000_000_000L
+    private const val HUD_END_DELAY_NS = 3_000_000_000L
 }
