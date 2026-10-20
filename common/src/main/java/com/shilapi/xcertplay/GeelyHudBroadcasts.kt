@@ -51,7 +51,8 @@ internal object GeelyHudBroadcasts {
     private const val TICK_MILLIS = 1_000L
     /** MConfig+ 48.1 clears the HUD after 10 s without `hud.NAVI_ALIVE`. */
     private const val RESEND_MILLIS = 3_000L
-    private const val ARROW_PX = 128
+    /** Side of the arrow bitmap in pixels, as the patched Yandex Navigator sends it; MConfig+ scales it. */
+    private const val ARROW_BITMAP_SIZE = 128
     /** CarPlay shows this step ("towards ...") without an icon. */
     private const val PROCEED_TO_ROUTE = 11
 
@@ -139,17 +140,17 @@ internal object GeelyHudBroadcasts {
     // A blank bitmap for no arrow, so MConfig+ does not keep showing the previous one.
     private fun arrow(context: Context, res: Int, exit: Int?): Bitmap? {
         if (arrowKey == res to exit) return arrowBitmap
-        val bitmap = Bitmap.createBitmap(ARROW_PX, ARROW_PX, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(ARROW_BITMAP_SIZE, ARROW_BITMAP_SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         if (res != 0) {
             val drawable = ContextCompat.getDrawable(context, res)?.mutate() ?: return null
-            drawable.setBounds(0, 0, ARROW_PX, ARROW_PX)
+            drawable.setBounds(0, 0, ARROW_BITMAP_SIZE, ARROW_BITMAP_SIZE)
             drawable.draw(canvas)
         }
         if (exit != null) {
-            val badge = ARROW_PX * 0.42f
-            val cx = ARROW_PX - badge / 2f
-            val cy = ARROW_PX - badge / 2f
+            val badge = ARROW_BITMAP_SIZE * 0.42f
+            val cx = ARROW_BITMAP_SIZE - badge / 2f
+            val cy = ARROW_BITMAP_SIZE - badge / 2f
             canvas.drawCircle(cx, cy, badge / 2f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
             val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.BLACK
