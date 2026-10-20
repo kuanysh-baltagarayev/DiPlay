@@ -40,7 +40,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".hudtest"
-            versionNameSuffix = "-hud-test-callmic"
+            versionNameSuffix = "-hud-test-geelyhud"
         }
         release {
             optimization {
