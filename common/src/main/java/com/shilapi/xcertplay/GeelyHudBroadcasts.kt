@@ -189,15 +189,15 @@ internal object GeelyHudBroadcasts {
         else -> ""
     }
 
-    // As the navigation widget shows them.
+    // As the navigation widget shows them, with the unit chosen after rounding (995 m is "1,0 км").
     private fun distance(context: Context, meters: Long): String = when {
-        meters < 1_000 -> context.getString(R.string.widget_distance_meters, ((meters + 5) / 10 * 10).toInt())
-        meters < 10_000 -> context.getString(R.string.widget_distance_km_decimal, meters / 1000.0)
+        meters < 995 -> context.getString(R.string.widget_distance_meters, ((meters + 5) / 10 * 10).toInt())
+        meters < 9_950 -> context.getString(R.string.widget_distance_km_decimal, meters / 1000.0)
         else -> context.getString(R.string.widget_distance_km, ((meters + 500) / 1000).toInt())
     }
 
     private fun duration(context: Context, seconds: Long): String {
-        val minutes = ((seconds + 30) / 60).toInt()
+        val minutes = ((seconds + 30) / 60).toInt().coerceAtLeast(1)
         return if (minutes < 60) context.getString(R.string.widget_minutes, minutes)
         else context.getString(R.string.widget_hours_minutes, minutes / 60, minutes % 60)
     }
