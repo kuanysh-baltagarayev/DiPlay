@@ -18,6 +18,8 @@ internal data class BydAppleManeuver(
     val remainingSeconds: Long? = null,
     val remainingMeters: Long? = null,
     val arrivalEpochSeconds: Long? = null,
+    /** The maneuver after this one (second entry of the current list), for a "then" hint. */
+    val nextType: Int? = null,
 )
 
 internal enum class BydHudRouteChange {
@@ -42,12 +44,18 @@ internal class BydHudRouteState(
     private val noRouteHideNs: Long = NO_ROUTE_HIDE_NS,
     /** Fall back to the maneuver description (0x5202 field 2) for the road; 2GIS puts the street there. */
     private val descriptionAsRoad: Boolean = false,
+    /**
+     * Wait this long before NoRouteSet or Arrived ends the route; 0 ends it at once. Google Maps
+     * sends a new route's maneuvers and then the old route's end, and never resends the maneuvers.
+     */
+    private val endDelayNs: Long = 0,
 ) {
     private data class Maneuver(val type: Int, val drivingSide: Int, val afterRoad: String, val description: String = "")
 
     private val maneuvers = mutableMapOf<Int, Maneuver>()
     private var routeActive = false
     private var activeIndex = -1
+    private var nextIndex = -1
     private var distanceMeters = 0
     private var currentRoad = ""
     private var arrivalEpochSeconds: Long? = null
@@ -56,6 +64,7 @@ internal class BydHudRouteState(
     private var emptyListSinceNs: Long? = null
     private var lastRouteUpdateNs: Long? = null
     private var noRouteSinceNs: Long? = null
+    private var endingSinceNs: Long? = null
     private var holdingAcrossDrop = false
 
     fun accept(messageId: Int, payload: ByteArray): BydHudRouteChange {
@@ -85,6 +94,7 @@ internal class BydHudRouteState(
         return BydAppleManeuver(
             distanceMeters, maneuver.type, maneuver.drivingSide,
             roadFor(maneuver), remainingSeconds, remainingMeters, arrivalEpochSeconds,
+            nextType = maneuvers[nextIndex]?.type,
         )
     }
 
@@ -92,6 +102,7 @@ internal class BydHudRouteState(
         val wasActive = routeActive
         routeActive = false
         activeIndex = -1
+        nextIndex = -1
         distanceMeters = 0
         currentRoad = ""
         arrivalEpochSeconds = null
@@ -100,6 +111,7 @@ internal class BydHudRouteState(
         emptyListSinceNs = null
         lastRouteUpdateNs = null
         noRouteSinceNs = null
+        endingSinceNs = null
         holdingAcrossDrop = false
         maneuvers.clear()
         return wasActive
@@ -116,6 +128,8 @@ internal class BydHudRouteState(
     }
 
     private fun activeManeuver(): Maneuver? {
+        val ending = endingSinceNs
+        if (ending != null && nanoTime() - ending >= endDelayNs) clear()
         if (!routeActive || activeIndex < 0) return null
         val updated = lastRouteUpdateNs ?: return null
         if (nanoTime() - updated >= staleRouteNs) return null
@@ -151,6 +165,7 @@ internal class BydHudRouteState(
         var state: Int? = null
         var distance: Int? = null
         var firstManeuver: Int? = null
+        var secondManeuver: Int? = null
         var listPresent = false
         forEachTlv(data) { type, value, valueLength ->
             when {
@@ -165,6 +180,7 @@ internal class BydHudRouteState(
                 type == 0x0d -> {
                     listPresent = true
                     if (valueLength >= 2) firstManeuver = u16(data, value)
+                    if (valueLength >= 4) secondManeuver = u16(data, value + 2)
                 }
             }
         }
@@ -172,8 +188,13 @@ internal class BydHudRouteState(
         // Only NoRouteSet (0) and Arrived (2) end the route. A wireless handoff often sends
         // NoRouteSet while the session is still coming back — keep the overlay instruction then.
         if (state == 0 || state == 2) {
+            if (endDelayNs > 0) {
+                if (endingSinceNs == null) endingSinceNs = nanoTime()
+                return BydHudRouteChange.NONE
+            }
             return if (clear()) BydHudRouteChange.CLEAR else BydHudRouteChange.NONE
         }
+        if (state != null) endingSinceNs = null
         // The iPhone briefly sends an empty current list every few seconds and while rerouting. Keep the last
         // maneuver (and the cached 0x5202 details, which are never resent) and hide it only if the list stays
         // empty; the bridges' 1 s tick clears the outputs once current() turns null.
@@ -185,6 +206,7 @@ internal class BydHudRouteState(
         if (state != null) routeActive = true
         if (firstManeuver != null) {
             activeIndex = firstManeuver!!
+            nextIndex = secondManeuver ?: -1
             routeActive = true
         }
         if (distance != null) distanceMeters = distance!!.coerceAtLeast(0)

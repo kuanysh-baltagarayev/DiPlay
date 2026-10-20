@@ -49,4 +49,29 @@ class GeelyHudBroadcastsTest {
         assertEquals("126 км", turn.remainingDistance)
         assertEquals("2 ч 05 мин", turn.remainingTime)
     }
+
+    @Test fun theNextManeuverIsAddedToTheStreet() {
+        val withRoad = GeelyHudBroadcasts.turn(
+            context,
+            CarPlayGlance.Snapshot(connected = true, maneuverType = 2, road = "Ахмедьярова", nextManeuverType = 1),
+        )!!
+        assertEquals("Ахмедьярова · затем налево", withRoad.road)
+        val noRoad = GeelyHudBroadcasts.turn(
+            context, CarPlayGlance.Snapshot(connected = true, maneuverType = 2, nextManeuverType = 30),
+        )!!
+        assertEquals("Затем по кольцу, 3-й съезд", noRoad.road)
+    }
+
+    @Test fun theStartStepHasNoArrowAndARoundaboutCarriesItsExit() {
+        val start = GeelyHudBroadcasts.turn(
+            context, CarPlayGlance.Snapshot(connected = true, maneuverType = 11, road = "ул. Ахмедьярова"),
+        )!!
+        assertEquals(0, start.arrow)
+        assertEquals("0 м", start.distance)
+        val roundabout = GeelyHudBroadcasts.turn(
+            context, CarPlayGlance.Snapshot(connected = true, maneuverType = 29, distanceMeters = 300),
+        )!!
+        assertEquals(R.drawable.ic_maneuver_roundabout, roundabout.arrow)
+        assertEquals(2, roundabout.exit)
+    }
 }
