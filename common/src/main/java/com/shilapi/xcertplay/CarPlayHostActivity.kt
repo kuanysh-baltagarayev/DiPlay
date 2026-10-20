@@ -862,6 +862,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             registerReceiver(bluetoothOnReceiver, bluetoothState)
         }
         NavigationWidgetUpdater.attach(applicationContext)
+        GeelyHudBroadcasts.attach(applicationContext)
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
         MapMirrors.sink = mirrorSink
