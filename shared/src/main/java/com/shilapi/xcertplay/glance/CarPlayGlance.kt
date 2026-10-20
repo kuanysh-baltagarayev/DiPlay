@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.glance
 
+import com.shilapi.xcertplay.hud.BydAppleManeuver
 import com.shilapi.xcertplay.hud.BydHudRouteState
 import com.shilapi.xcertplay.hud.ClusterSongState
 import com.shilapi.xcertplay.iap2.message.Iap2LaneGuidance
@@ -30,6 +31,12 @@ object CarPlayGlance {
     private const val TAG = "DiPlay-Lane"
 
     private val route = BydHudRouteState()
+    /**
+     * The same guidance for a windshield HUD: the iPhone sends nothing while the car stands, so the
+     * turn stays until the route ends or CarPlay disconnects, and the street falls back to the
+     * maneuver description.
+     */
+    private val hudRoute = BydHudRouteState(staleRouteNs = HUD_STALE_ROUTE_NS, descriptionAsRoad = true)
     private val song = ClusterSongState()
     private var connected = false
     private var last = Snapshot()
@@ -64,8 +71,10 @@ object CarPlayGlance {
         }
         val changed = synchronized(this) {
             when (frame.messageId) {
-                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE ->
+                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE -> {
                     runCatching { route.accept(frame.messageId, frame.payload) }
+                    runCatching { hudRoute.accept(frame.messageId, frame.payload) }
+                }
                 ClusterSongState.NOW_PLAYING_UPDATE -> runCatching { song.accept(frame) }
                 else -> return
             }
@@ -80,6 +89,7 @@ object CarPlayGlance {
             connected = next
             if (!next) {
                 route.clear()
+                hudRoute.clear()
                 song.clear()
             }
             publishLocked()
@@ -101,10 +111,19 @@ object CarPlayGlance {
         }
     }
 
+    /** Like [snapshot], with the guidance kept for a windshield HUD (see [hudRoute]). */
+    fun hudSnapshot(): Snapshot = synchronized(this) { snapshotLocked(hudRoute.currentApple()) }
+
     private fun publishLocked(): Snapshot? {
-        val maneuver = route.currentApple()
+        val next = snapshotLocked(route.currentApple())
+        if (next == last) return null
+        last = next
+        return next
+    }
+
+    private fun snapshotLocked(maneuver: BydAppleManeuver?): Snapshot {
         val current = song.current()
-        val next = Snapshot(
+        return Snapshot(
             connected = connected,
             maneuverType = maneuver?.type,
             drivingSide = maneuver?.drivingSide ?: 0,
@@ -116,8 +135,7 @@ object CarPlayGlance {
             song = current?.text,
             playing = current?.playing ?: false,
         )
-        if (next == last) return null
-        last = next
-        return next
     }
+
+    private const val HUD_STALE_ROUTE_NS = 30 * 60 * 1_000_000_000L
 }

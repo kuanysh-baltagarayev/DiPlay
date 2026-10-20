@@ -80,7 +80,7 @@ internal object GeelyHudBroadcasts {
 
     private fun update() {
         val app = context ?: return
-        val turn = turn(app, CarPlayGlance.snapshot())
+        val turn = turn(app, CarPlayGlance.hudSnapshot())
         val now = SystemClock.elapsedRealtime()
         if (turn == null) {
             if (sent != null) {
