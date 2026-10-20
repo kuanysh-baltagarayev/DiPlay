@@ -173,6 +173,20 @@ class BydHudRouteStateTest {
     }
 
     @Test
+    fun `description is the road only where asked for`() {
+        val maneuver = tlvs(tlv(0x01, 0, 0), tlv(0x02, *utf8z("Ахмедьярова")), tlv(0x03, 1))
+        val route = tlvs(tlv(0x01, 1), tlv(0x03, *utf8z("Hauptstraße")), tlv(0x0d, 0, 0))
+        val byd = BydHudRouteState()
+        val hud = BydHudRouteState(descriptionAsRoad = true)
+        for (state in listOf(byd, hud)) {
+            state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, maneuver)
+            state.accept(BydHudRouteState.ROUTE_GUIDANCE_UPDATE, route)
+        }
+        assertEquals("Hauptstraße", byd.current()!!.road)
+        assertEquals("Ахмедьярова", hud.currentApple()!!.road)
+    }
+
+    @Test
     fun `roundabout exit has blank arrow and exit icon`() {
         val state = BydHudRouteState()
         state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 0), tlv(0x03, 29)))
