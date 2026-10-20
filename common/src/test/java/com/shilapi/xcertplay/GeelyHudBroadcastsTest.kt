@@ -74,4 +74,14 @@ class GeelyHudBroadcastsTest {
         assertEquals(R.drawable.ic_maneuver_roundabout, roundabout.arrow)
         assertEquals(2, roundabout.exit)
     }
+
+    @Test fun roundingPicksTheUnitAndTheLastMinuteIsOne() {
+        fun turn(meters: Int, seconds: Long) = GeelyHudBroadcasts.turn(
+            context, CarPlayGlance.Snapshot(connected = true, maneuverType = 2, distanceMeters = meters, remainingSeconds = seconds),
+        )!!
+        assertEquals("990 м", turn(994, 600).distance)
+        assertEquals("1,0 км", turn(997, 600).distance)
+        assertEquals("10 км", turn(9_960, 600).distance)
+        assertEquals("1 мин", turn(100, 20).remainingTime)
+    }
 }
