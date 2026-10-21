@@ -776,9 +776,9 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CALL_VOICE_FILTER, enabled).apply()
     }
 
-    /** On by default where the Geely cluster map is available, the same Geely/ECARX head units. */
+    /** Off by default: calls without the communication mode are not verified on Geely yet. */
     fun loadCabinCalls(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CABIN_CALLS, GeelyClusterMap.available(context))
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CABIN_CALLS, false)
 
     fun saveCabinCalls(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CABIN_CALLS, enabled).apply()
