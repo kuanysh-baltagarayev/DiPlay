@@ -5,6 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Looper
+import java.time.Duration
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -139,6 +141,24 @@ class AudioFocusAutoYieldTest {
         assertTrue(volumes(phone).isEmpty())
         coordinator.onExternalFocusChange(AudioManager.AUDIOFOCUS_GAIN)
         assertEquals(listOf(0f, 1f), volumes(second))
+    }
+
+    @Test fun refusedRequestIsAskedAgainAndRestoresMediaOnceGranted() {
+        val coordinator = coordinator()
+        val first = track(); val phone = track(); val second = track()
+        coordinator.acquire(first, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(phone, AudioChannel.PHONE, attributes)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        shadowOf(manager).setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        coordinator.release(first)
+        // The call's focus still holds when music comes back after the call.
+        shadowOf(manager).setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        coordinator.acquire(second, AudioChannel.MEDIA, attributes)
+        assertEquals(listOf(0f), volumes(second))
+        shadowOf(manager).setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300))
+        assertEquals(listOf(0f, 1f), volumes(second))
+        assertTrue(volumes(phone).isEmpty())
     }
 
     @Test fun sinkFocusTeardownRejectsLateWorkerAcquisitionAndQueuedCallbacks() {
