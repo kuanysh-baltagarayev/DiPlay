@@ -2018,6 +2018,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 AirPlayPersistence.saveCallVoiceFilter(this, it)
                 markReconnectNeeded()
             }
+            toggle(card, getString(R.string.settings_cabin_calls), getString(R.string.settings_cabin_calls_description),
+                AirPlayPersistence.loadCabinCalls(this)) {
+                AirPlayPersistence.saveCabinCalls(this, it)
+                markReconnectNeeded()
+            }
             toggle(card, getString(R.string.phone_audio_route), getString(R.string.phone_audio_route_description),
                 BydOutputSettings.phoneAudioRoute(this)) {
                 BydOutputSettings.setPhoneAudioRoute(this, it)
