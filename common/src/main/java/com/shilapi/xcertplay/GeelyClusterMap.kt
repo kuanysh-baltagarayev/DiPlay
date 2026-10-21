@@ -84,7 +84,9 @@ internal object GeelyClusterMap {
                 when (intent.action) {
                     ACTION_SHOW -> if (connected) {
                         wanted = true
-                        if (root == null) show() else send(ACTION_SHOWN)
+                        // Without the window (no overlay permission, no display 2) the iPhone must
+                        // not keep drawing the map, and MConfig+ gets no answer.
+                        if (root != null) send(ACTION_SHOWN) else if (!show()) wanted = false
                     }
                     ACTION_HIDE -> if (wanted) {
                         wanted = false
@@ -127,14 +129,16 @@ internal object GeelyClusterMap {
         if (shown) send(ACTION_END)
     }
 
-    private fun show() {
-        val app = context ?: return
-        if (root != null) return
-        runCatching {
+    /** Opens the window and answers MConfig+; false when it could not be opened. */
+    private fun show(): Boolean {
+        val app = context ?: return false
+        if (root != null) return true
+        return runCatching {
             val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
-                ?.getDisplay(DISPLAY_ID) ?: return
+                ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
             val displayContext = windowContext(app, display)
-            val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+            val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                ?: error("no window manager on display $DISPLAY_ID")
             val frame = FrameLayout(displayContext).apply { setBackgroundColor(Color.BLACK) }
             frame.addView(TextureView(displayContext).apply { surfaceTextureListener = MirrorSurface() },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -156,7 +160,7 @@ internal object GeelyClusterMap {
             applyTurnCard()
             send(ACTION_SHOWN)
             Log.i(TAG, "cluster map window shown on display $DISPLAY_ID")
-        }.onFailure { Log.w(TAG, "cluster map window failed", it) }
+        }.onFailure { Log.w(TAG, "cluster map window failed", it) }.isSuccess
     }
 
     private fun windowContext(app: Context, display: Display): Context {
