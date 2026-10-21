@@ -836,7 +836,7 @@ object AirPlayPersistence {
     }
 
     fun loadClusterMapEnabled(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CLUSTER_MAP, false)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CLUSTER_MAP, GeelyClusterMap.available(context))
 
     fun loadAdbClusterEnabled(context: Context): Boolean = loadClusterMapEnabled(context) &&
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ADB_CLUSTER_ACTIVITY, false)
@@ -984,7 +984,8 @@ object AirPlayPersistence {
     fun loadClusterContent(context: Context): CarPlayClusterDisplay.Content =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CLUSTER_CONTENT, null)
             ?.let { name -> CarPlayClusterDisplay.Content.entries.firstOrNull { it.name == name } }
-            ?: if (AdbClusterRouter.enabled(context) && !loadLegacyClusterEnabled(context)) CarPlayClusterDisplay.Content.INSTRUMENTS else CarPlayClusterDisplay.Content.MAP
+            ?: if ((AdbClusterRouter.enabled(context) && !loadLegacyClusterEnabled(context)) ||
+                GeelyClusterMap.available(context)) CarPlayClusterDisplay.Content.INSTRUMENTS else CarPlayClusterDisplay.Content.MAP
 
     fun saveClusterContent(context: Context, content: CarPlayClusterDisplay.Content) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_CLUSTER_CONTENT, content.name).apply()
@@ -1261,7 +1262,8 @@ object AirPlayPersistence {
         overlaySettingsListener?.invoke()
     }
 
-    fun loadClusterMapScalePercent(context: Context): Int = CarPlayClusterDisplay.STREAM_SCALE_PERCENT.let { default ->
+    fun loadClusterMapScalePercent(context: Context): Int =
+        (if (GeelyClusterMap.available(context)) 100 else CarPlayClusterDisplay.STREAM_SCALE_PERCENT).let { default ->
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_CLUSTER_MAP_SCALE, default)
             .takeIf { it in CarPlayClusterDisplay.scalePresets } ?: default
     }

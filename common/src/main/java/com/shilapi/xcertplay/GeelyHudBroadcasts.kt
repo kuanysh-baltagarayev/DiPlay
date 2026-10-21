@@ -79,7 +79,7 @@ internal object GeelyHudBroadcasts {
         Log.i(TAG, "sending CarPlay guidance to MConfig+")
     }
 
-    private fun installed(context: Context): Boolean = try {
+    internal fun installed(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(MCONFIG_PACKAGE, 0)
         true
     } catch (_: PackageManager.NameNotFoundException) {

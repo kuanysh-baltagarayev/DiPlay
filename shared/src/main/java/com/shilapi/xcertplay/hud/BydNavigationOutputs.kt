@@ -41,6 +41,15 @@ object BydNavigationOutputs {
     /** The running CarPlay session: told every second whether the cluster currently shows the map. */
     fun setClusterStreamControl(control: (Boolean) -> Unit) { BydClusterMapPause.streamControl = control }
 
+    /** Asks the running CarPlay session to show (showUI) or hide (stopUI) the cluster map now. */
+    fun clusterStreamControl(shown: Boolean) { BydClusterMapPause.streamControl?.invoke(shown) }
+
+    /**
+     * Set by a head-unit integration that decides itself when the cluster shows the map (the Geely
+     * cluster map); every showUI/stopUI request passes through it.
+     */
+    @Volatile var clusterUiFilter: ((Boolean) -> Boolean)? = null
+
     /** Latest ADB wheel-menu navi mode, or null when it cannot be read. */
     fun clusterNaviMode(): BydClusterNaviMode? = BydClusterMapPause.lastNaviMode
 

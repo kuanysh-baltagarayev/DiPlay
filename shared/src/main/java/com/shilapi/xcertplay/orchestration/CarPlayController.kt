@@ -786,7 +786,8 @@ class CarPlayController(
     }
 
     // Each new cluster stream starts with the map drawn (its initialURL); send only real changes.
-    private fun applyClusterUi(shown: Boolean) = synchronized(clusterUiLock) {
+    private fun applyClusterUi(requested: Boolean) = synchronized(clusterUiLock) {
+        val shown = BydNavigationOutputs.clusterUiFilter?.invoke(requested) ?: requested
         val session = activeSession ?: return@synchronized
         val stream = session.clusterStream.takeIf { it > 0 } ?: return@synchronized
         if (clusterUiStream != session to stream) {

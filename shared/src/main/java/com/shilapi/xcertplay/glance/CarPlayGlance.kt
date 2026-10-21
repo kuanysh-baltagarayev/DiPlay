@@ -43,6 +43,9 @@ object CarPlayGlance {
     /** Called with each new snapshot, on the thread that changed it. */
     @Volatile var listener: ((Snapshot) -> Unit)? = null
 
+    /** Told when a CarPlay session starts or ends. */
+    @Volatile var connectionListener: ((Boolean) -> Unit)? = null
+
     /** Refresh time-dependent guidance even when no new metadata frame has arrived. */
     fun snapshot(): Snapshot {
         val (changed, current) = synchronized(this) { publishLocked() to last }
@@ -77,6 +80,7 @@ object CarPlayGlance {
             publishLocked()
         }
         changed?.let { listener?.invoke(it) }
+        connectionListener?.invoke(next)
     }
 
     /** Like [snapshot], with the guidance kept for a windshield HUD (see [hudRoute]). */

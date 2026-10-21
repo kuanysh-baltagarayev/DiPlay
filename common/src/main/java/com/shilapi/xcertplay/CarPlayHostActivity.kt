@@ -804,6 +804,7 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NavigationWidgetUpdater.attach(applicationContext)
         GeelyHudBroadcasts.attach(applicationContext)
+        GeelyClusterMap.attach(applicationContext)
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
         MapMirrors.sink = mirrorSink
@@ -1564,6 +1565,24 @@ class CarPlayHostActivity : ComponentActivity() {
                     MapMirrors.streamAspect = it.widthPixels.toDouble() / it.heightPixels
                     appendLog("Cluster map: requesting ${it.widthPixels}x${it.heightPixels} on ${size.x}x${size.y} safeArea=${it.safeArea} url=${it.initialUrl}")
                 }
+            }
+        }
+        if (GeelyClusterMap.available(this)) {
+            val requestedScale = AirPlayPersistence.loadClusterMapScalePercent(this)
+            fun streamAt(scale: Int) = CarPlayClusterDisplay.config(
+                GeelyClusterMap.STREAM_WIDTH,
+                GeelyClusterMap.STREAM_HEIGHT,
+                scale,
+                content = AirPlayPersistence.loadClusterContent(this),
+                markerXPercent = AirPlayPersistence.loadClusterMarkerXPercent(this),
+                markerYPercent = AirPlayPersistence.loadClusterMarkerYPercent(this),
+                baseSafeArea = CarPlayClusterDisplay.VIRTUAL_SAFE_AREA_PERCENT,
+            )
+            val requested = streamAt(requestedScale)
+            val effective = if (requestedScale > 100 && !largerCanvasSupport(requested).supported) streamAt(100) else requested
+            return effective.also {
+                MapMirrors.streamAspect = it.widthPixels.toDouble() / it.heightPixels
+                appendLog("Cluster map (Geely): requesting ${it.widthPixels}x${it.heightPixels} safeArea=${it.safeArea} url=${it.initialUrl}")
             }
         }
         // Fallback for head units without physical cluster projection (e.g. DiLink 3.0/3.5 without digital cluster):
