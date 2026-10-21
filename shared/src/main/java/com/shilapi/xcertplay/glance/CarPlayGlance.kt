@@ -54,6 +54,9 @@ object CarPlayGlance {
     /** The last strip written to the log: Apple Maps repeats it while the overlap lasts. */
     private var loggedLanes: List<LaneGuidanceLane>? = null
 
+    /** Told when a CarPlay session starts or ends. */
+    @Volatile var connectionListener: ((Boolean) -> Unit)? = null
+
     /** Refresh time-dependent guidance even when no new metadata frame has arrived. */
     fun snapshot(): Snapshot {
         val (changed, current) = synchronized(this) { publishLocked() to last }
@@ -99,6 +102,7 @@ object CarPlayGlance {
             publishLocked()
         }
         changed?.let { listener?.invoke(it) }
+        connectionListener?.invoke(next)
     }
 
     /**

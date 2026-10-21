@@ -220,6 +220,7 @@ internal object ClusterActivityOutput {
         cardOpacity = opacity
         cardNight = night
         activity.get()?.updateTurnCard()
+        GeelyClusterMap.setTurnCard(next, x, y, size, opacity, night)
     }
 
     private var previewOwner: Any? = null
