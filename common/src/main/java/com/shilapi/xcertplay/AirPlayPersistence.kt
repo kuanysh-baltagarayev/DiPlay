@@ -80,7 +80,6 @@ object AirPlayPersistence {
     private const val KEY_CAR_BLUETOOTH_AUDIO = "car_bluetooth_audio"
     private const val KEY_CALL_ECHO_CANCELLATION = "call_echo_cancellation"
     private const val KEY_CALL_VOICE_FILTER = "call_voice_filter"
-    private const val KEY_CABIN_CALLS = "cabin_calls"
     private const val KEY_CALL_SPEAKERPHONE = "call_speakerphone"
     private const val KEY_SMOOTH_VIDEO = "smooth_video"
     private const val KEY_MTK_DECODER_TUNING = "mtk_decoder_tuning"
@@ -774,14 +773,6 @@ object AirPlayPersistence {
 
     fun saveCallVoiceFilter(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CALL_VOICE_FILTER, enabled).apply()
-    }
-
-    /** Off by default: calls without the communication mode are not verified on Geely yet. */
-    fun loadCabinCalls(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CABIN_CALLS, false)
-
-    fun saveCabinCalls(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CABIN_CALLS, enabled).apply()
     }
 
     fun loadCallSpeakerphone(context: Context): Boolean =

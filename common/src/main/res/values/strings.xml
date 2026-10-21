@@ -777,8 +777,6 @@
     <string name="call_echo_cancellation_description">Tries to reduce speaker echo sent to the other person during CarPlay calls. Results depend on the head unit. Applies at the next CarPlay connection.</string>
     <string name="call_voice_filter">Clearer call voices (experimental)</string>
     <string name="call_voice_filter_description">Cuts bass from CarPlay call audio. This may change how voices sound. Applies at the next CarPlay connection.</string>
-    <string name="settings_cabin_calls">Geely calls: car microphone without call mode (experimental)</string>
-    <string name="settings_cabin_calls_description">For Geely/Monjaro head units, which do not keep the call audio mode for other apps: CarPlay calls record from the car microphone directly instead of switching Android to call mode. Off by default. Applies at the next CarPlay connection.</string>
     <string name="phone_audio_route">Car phone audio for CarPlay calls (experimental)</string>
     <string name="phone_audio_route_description">Holds a Telecom call during CarPlay calls so the car switches to its phone audio state and its own echo cancellation works. DiPlay’s echo canceller stays out of those calls. Your voice can come out louder or distorted. Off by default; applies at the next call.</string>
     <string name="phone_audio_route_apps">Car phone audio for VoIP calls in other apps (experimental)</string>

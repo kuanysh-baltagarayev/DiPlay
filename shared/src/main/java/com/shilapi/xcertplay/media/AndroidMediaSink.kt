@@ -228,11 +228,6 @@ class AndroidMediaSink(
     private val callEchoCancellation: Boolean = false,
     /** Cut the bass that head units add when they play a call as music. */
     private val callVoiceFilter: Boolean = false,
-    /**
-     * Geely/ECARX head units do not keep the communication audio mode for other apps: calls record
-     * from the car microphone directly instead of entering it.
-     */
-    private val cabinCalls: Boolean = false,
     /** Read at each call: a phone or tablet used as the head unit plays calls on its loudspeaker (#701). */
     private val callSpeakerphone: () -> Boolean = { false },
     /**
@@ -568,7 +563,7 @@ class AndroidMediaSink(
         // This callback runs on the downlink thread; microphone failures must not stop playback.
         try {
             val speakerphoneCall = config.audioType == "telephony" &&
-                (cabinCalls || (appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)))
+                appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
             if (config.audioType == "telephony" && !speakerphoneCall) enterCommunicationMode(id)
             val uplink = microphoneUplinks.computeIfAbsent(id) {
                 MicrophoneUplink(config, onAudioDiagnostic,
