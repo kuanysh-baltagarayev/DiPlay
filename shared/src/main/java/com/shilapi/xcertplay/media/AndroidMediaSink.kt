@@ -55,6 +55,7 @@ internal class AudioFocusCoordinator(
     private var mediaVolume = FULL_VOLUME
     private var closed = false
     private var focusGeneration = 0L
+    private var retryHandler: Handler? = null
     private var currentListener = listenerFor(focusGeneration)
     internal val listener: AudioManager.OnAudioFocusChangeListener get() = currentListener
 
@@ -111,6 +112,7 @@ internal class AudioFocusCoordinator(
     fun close() {
         if (closed) return
         closed = true
+        retryHandler?.removeCallbacksAndMessages(null)
         active.clear()
         refreshRequest()
     }
@@ -144,6 +146,28 @@ internal class AudioFocusCoordinator(
         val line = "Audio: focus requested channel=${primary.channel} gain=$gain granted=$result activeTracks=${active.size}"
         Log.i(TAG, line)
         runCatching { report(line) }
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_FAILED) scheduleFocusRetry(focusGeneration, 1)
+    }
+
+    // The system's call focus can outlive the call by a moment (Telecom drops it after DiPlay's own
+    // connection ends), so the first media request after a call may be refused. Without a later
+    // request the music plays unfocused and the head unit can leave it silent.
+    private fun scheduleFocusRetry(generation: Long, attempt: Int) {
+        if (attempt > FOCUS_RETRY_MAX) return
+        val handler = retryHandler ?: Handler(Looper.getMainLooper()).also { retryHandler = it }
+        handler.postDelayed({ retryFocus(generation, attempt) }, FOCUS_RETRY_DELAY_MS)
+    }
+
+    @Synchronized
+    private fun retryFocus(generation: Long, attempt: Int) {
+        val pending = request
+        if (closed || generation != focusGeneration || pending == null || active.isEmpty()) return
+        val result = manager?.let(pending::request) ?: return
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
+        val line = "Audio: focus retry $attempt granted=$result activeTracks=${active.size}"
+        Log.i(TAG, line)
+        runCatching { report(line) }
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_FAILED) scheduleFocusRetry(generation, attempt + 1)
     }
 
     private fun setMediaVolume(volume: Float) {
@@ -170,6 +194,8 @@ internal class AudioFocusCoordinator(
         const val TAG = "DiPlay-AudioFocus"
         const val FULL_VOLUME = 1f
         const val DUCKED_VOLUME = 0.2f
+        const val FOCUS_RETRY_DELAY_MS = 300L
+        const val FOCUS_RETRY_MAX = 10
     }
 }
 
