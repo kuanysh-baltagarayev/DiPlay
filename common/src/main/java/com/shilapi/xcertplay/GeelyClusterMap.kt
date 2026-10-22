@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.SurfaceTexture
@@ -14,6 +15,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.Display
 import android.view.Gravity
@@ -30,16 +33,19 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
 /**
  * CarPlay's dashboard map (stream 111) on the Geely/ECARX instrument cluster. Display 2 (1920x1080)
  * feeds the windshield HUD from its lower part; in the DIM's map mode the cluster shows its top
- * 1920x720 and keeps drawing its own speed, rpm, gear, fuel, clock and warnings over the edges. The
- * map therefore goes into a window in the free middle of that area ([Layout], default 1200x440 at
- * 310,115, measured on a Monjaro) and the iPhone is asked for a stream of exactly that size.
+ * 1920x720 and keeps drawing its own speed, rpm, gear, fuel, clock and warnings over it, as over its
+ * own navigation map. The map fills a window there ([Layout], by default all of it) and the iPhone is
+ * asked for a stream of exactly that size. No safe area is set: the cluster's icons and texts change
+ * with the car's state, and they are drawn over the map, so they stay visible whatever lies under them.
  *
  * DiPlay switches the DIM itself ([EcarxDim]) when the window opens and closes. It is opened by
  * [toggle] (the "Map on cluster" launcher entry, [GeelyClusterMapToggleActivity]) or by MConfig+
  * 48.2's action "DiAuto/DiPlay карта на приборке", which sends [ACTION_SHOW]; DiPlay answers
  * [ACTION_SHOWN]. [ACTION_HIDE] removes the window; a session that ends while the map is shown
  * sends [ACTION_END] and gives the cluster its stock view back, and so does the next start after a
- * process that died with the map shown. While the window is not shown the iPhone is asked not to
+ * process that died with the map shown. When something else gives the cluster its stock view back
+ * (MConfig+'s own toggle, the cluster menu, the car), the global NaviMode setting changes and the
+ * window closes too, so DiPlay does not keep a map the cluster no longer shows. While the window is not shown the iPhone is asked not to
  * draw the cluster map (stopUI). [ACTION_LAYOUT] moves or resizes the window (extras x, y, w, h);
  * the stream follows at the next connection.
  */
@@ -67,6 +73,11 @@ internal object GeelyClusterMap {
     /** BYD's own cluster display; DiPlay's BYD cluster output owns those head units. */
     private const val BYD_CLUSTER_DISPLAY = "fission_bg"
     private const val MIRROR_KEY = "geely-cluster"
+    /** ECARX keeps the cluster's navigation mode here; 3 is the map mode DiPlay switches to. */
+    private const val NAVI_MODE_SETTING = "NaviMode"
+    /** A mode change this soon after DiPlay's own switch is DiPlay's, not someone else's. */
+    private const val OWN_SWITCH_GRACE_MILLIS = 1_500L
+    private const val NAVI_MODE_CHECK_DELAY_MILLIS = 500L
     /** The decoder may still write to the surface right after the window goes. */
     private const val SURFACE_RELEASE_DELAY_MILLIS = 1_000L
 
@@ -80,15 +91,16 @@ internal object GeelyClusterMap {
     private var root: FrameLayout? = null // main thread
     private var turnCard: ClusterTurnCardView? = null // main thread
     private var card = TurnCard(null, 0, 0, 0, 0, false) // main thread
+    private var ownSwitchAt = 0L // main thread, elapsedRealtime of DiPlay's last DIM switch
 
     /**
-     * The map window on the cluster canvas. The default is the free field between the stock readings
-     * of a Monjaro cluster with the seat belt fastened (photos 2026-10-22): x 310-1510, y 115-555. Width
-     * and height are multiples of 8, as the stream sizes are.
+     * The map window on the cluster canvas, by default all of it. Width and height are multiples of 8,
+     * as the stream sizes are. A smaller window leaves black around the map: on a Monjaro with the
+     * seat belt fastened the stock readings leave x 0-1820, y 115-555 free (photos 2026-10-22).
      */
     data class Layout(val x: Int, val y: Int, val width: Int, val height: Int) {
         companion object {
-            val DEFAULT = Layout(310, 115, 1200, 440)
+            val DEFAULT = Layout(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
             private const val MIN = 64
 
             fun sanitize(x: Int, y: Int, width: Int, height: Int): Layout {
@@ -152,7 +164,29 @@ internal object GeelyClusterMap {
             addAction(ACTION_LAYOUT)
         }
         ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        runCatching {
+            app.contentResolver.registerContentObserver(Settings.Global.getUriFor(NAVI_MODE_SETTING), false,
+                object : ContentObserver(main) {
+                    override fun onChange(selfChange: Boolean) {
+                        main.removeCallbacks(checkNaviMode)
+                        main.postDelayed(checkNaviMode, NAVI_MODE_CHECK_DELAY_MILLIS)
+                    }
+                })
+        }.onFailure { Log.w(TAG, "cannot watch the cluster's navigation mode", it) }
         Log.i(TAG, "waiting for the cluster map to be asked for; window ${layout(app)}")
+    }
+
+    /** Closes the window when the cluster left map mode without DiPlay asking for it. */
+    private val checkNaviMode = Runnable {
+        val app = context ?: return@Runnable
+        if (root == null || SystemClock.elapsedRealtime() - ownSwitchAt < OWN_SWITCH_GRACE_MILLIS) return@Runnable
+        val mode = runCatching { Settings.Global.getInt(app.contentResolver, NAVI_MODE_SETTING) }.getOrNull()
+            ?: return@Runnable
+        if (mode == EcarxDim.NAVI_MODE_FULL) return@Runnable
+        Log.i(TAG, "the cluster left map mode (NaviMode $mode) without DiPlay; closing the map window")
+        wanted = false
+        control(false)
+        close(restoreCluster = false)
     }
 
     /** Shows the map when it is hidden and hides it when it is shown. Main thread. */
@@ -255,6 +289,7 @@ internal object GeelyClusterMap {
             turnCard = cardView
             applyTurnCard()
             setHeld(app, true)
+            ownSwitchAt = SystemClock.elapsedRealtime()
             EcarxDim.switch(app, true)
             send(ACTION_SHOWN)
             Log.i(TAG, "cluster map window $layout shown on display $DISPLAY_ID")
@@ -277,7 +312,8 @@ internal object GeelyClusterMap {
         } else displayContext
     }
 
-    private fun close() {
+    /** [restoreCluster] false: the cluster already left map mode on its own, so it is left as it is. */
+    private fun close(restoreCluster: Boolean = true) {
         val frame = root
         val manager = window
         root = null
@@ -286,7 +322,10 @@ internal object GeelyClusterMap {
         if (frame == null || manager == null) return
         runCatching { manager.removeViewImmediate(frame) }
         context?.let { app ->
-            EcarxDim.switch(app, false)
+            if (restoreCluster) {
+                ownSwitchAt = SystemClock.elapsedRealtime()
+                EcarxDim.switch(app, false)
+            }
             setHeld(app, false)
         }
         Log.i(TAG, "cluster map window closed")

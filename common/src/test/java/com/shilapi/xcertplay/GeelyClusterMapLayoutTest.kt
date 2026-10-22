@@ -6,13 +6,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class GeelyClusterMapLayoutTest {
-    @Test fun theDefaultWindowSitsBetweenTheMonjaroClusterReadings() {
-        val d = Layout.DEFAULT
-        assertEquals(Layout(310, 115, 1200, 440), d)
-        // Clear of the car silhouette (x <= 280), the gear block (x >= 1830), the top strip (y <= 112)
-        // and the bottom arcs (y >= 556), measured on photos of the cluster.
-        assert(d.x > 280 && d.x + d.width < 1830 && d.y > 112 && d.y + d.height < 556)
-        assertEquals(d, Layout.sanitize(d.x, d.y, d.width, d.height))
+    @Test fun theMapFillsTheClusterCanvasByDefault() {
+        assertEquals(Layout(0, 0, 1920, 720), Layout.DEFAULT)
+        assertEquals(Layout.DEFAULT, Layout.sanitize(0, 0, 1920, 720))
     }
 
     @Test fun theStreamHasTheWindowSize() {

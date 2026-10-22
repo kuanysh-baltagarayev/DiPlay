@@ -7,6 +7,11 @@ plugins {
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
 
+// DIPLAY_CAR_PACKAGE=1 builds the debug APK as com.shihab.diplay, the package MConfig+ (plus.monjaro)
+// sends its DiPlay actions to, such as "DiAuto/DiPlay карта на приборке". Otherwise it is
+// com.shihab.diplay.hudtest and installs next to another DiPlay.
+val carPackage = providers.environmentVariable("DIPLAY_CAR_PACKAGE").orNull == "1"
+
 android {
     namespace = "com.shilapi.xcertplay"
     compileSdk {
@@ -39,8 +44,8 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".hudtest"
-            versionNameSuffix = "-hud-test"
+            if (!carPackage) applicationIdSuffix = ".hudtest"
+            versionNameSuffix = if (carPackage) "-geely" else "-hud-test-geelyhud"
         }
         release {
             optimization {
