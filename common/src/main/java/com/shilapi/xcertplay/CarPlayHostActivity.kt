@@ -1661,9 +1661,11 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         if (GeelyClusterMap.available(this)) {
             val requestedScale = AirPlayPersistence.loadClusterMapScalePercent(this)
+            // The stream has the size of the map window between the cluster's own readings.
+            val window = GeelyClusterMap.layout(this)
             fun streamAt(scale: Int) = CarPlayClusterDisplay.config(
-                GeelyClusterMap.STREAM_WIDTH,
-                GeelyClusterMap.STREAM_HEIGHT,
+                window.width,
+                window.height,
                 scale,
                 content = AirPlayPersistence.loadClusterContent(this),
                 markerXPercent = AirPlayPersistence.loadClusterMarkerXPercent(this),
