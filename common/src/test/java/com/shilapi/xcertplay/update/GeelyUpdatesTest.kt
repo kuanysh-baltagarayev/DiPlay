@@ -50,6 +50,13 @@ class GeelyUpdatesTest {
         assertTrue(GeelyUpdates.headers("https://objects.githubusercontent.com/x").isEmpty())
     }
 
+    @Test fun aReleaseCachedFromUpstreamIsNotOffered() {
+        assertTrue(GeelyUpdates.ownRelease("https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.22/a.apk"))
+        GeelyUpdates.configure("owner/builds", "secret")
+        assertFalse(GeelyUpdates.ownRelease("https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.22/a.apk"))
+        assertTrue(GeelyUpdates.ownRelease("https://api.github.com/repos/owner/builds/releases/assets/7"))
+    }
+
     @Test fun privateFilesDownloadThroughTheApi() {
         val asset = JSONObject()
             .put("url", "https://api.github.com/repos/owner/builds/releases/assets/7")
@@ -64,7 +71,9 @@ class GeelyUpdatesTest {
             "com.shihab.diplay", File("/sdcard/update/DiPlay-0.2.21-geely.2.apk"), File("/sdcard/update/install.log"),
         )
         val lines = script.lines()
-        val install = lines.indexOfFirst { it.startsWith("pm install -r '/sdcard/update/DiPlay-0.2.21-geely.2.apk'") }
+        val install = lines.indexOfFirst {
+            it.startsWith("cp '/sdcard/update/DiPlay-0.2.21-geely.2.apk' /data/local/tmp/diplay-update.apk && pm install -r ")
+        }
         val service = lines.indexOfFirst { "com.shihab.diplay/com.shilapi.xcertplay.UsbAutoConfirmService" in it }
         val reopen = lines.indexOfFirst { it.startsWith("am start -n 'com.shihab.diplay/com.shilapi.xcertplay.DiPlayActivity'") }
         assertTrue(install >= 0 && service > install && reopen > service)

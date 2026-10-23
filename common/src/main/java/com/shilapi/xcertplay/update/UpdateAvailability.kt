@@ -36,7 +36,7 @@ internal object UpdateAvailability {
             apkUrl = values.getString(APK_URL, null) ?: return null,
             checksumsUrl = values.getString(CHECKSUMS_URL, null) ?: return null,
         )
-        if (UpdateVersion.isNewer(release.tagName, installedVersion)) return release
+        if (GeelyUpdates.ownRelease(release.apkUrl) && UpdateVersion.isNewer(release.tagName, installedVersion)) return release
         clear(context)
         return null
     }
