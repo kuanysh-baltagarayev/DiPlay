@@ -35,11 +35,16 @@ internal data class GeelyHudTurn(
  * Sends CarPlay's next turn to MConfig+ (`plus.monjaro`), which draws it on the Geely/ECARX
  * windshield HUD. MConfig+ takes navigation from the broadcasts of the patched Yandex Navigator
  * (`com.yandex.*`); from 48.1 it also takes `hud.NAVI_ALIVE` as a watchdog and `hud.NAVI_END` to
- * clear the HUD. Runs only where MConfig+ is installed; the turn comes from [CarPlayGlance].
+ * clear the HUD. Runs only where MConfig+ or the cluster dashboard mSpeed is installed; the turn
+ * comes from [CarPlayGlance].
+ *
+ * The broadcasts go to every app, as the patched Navigator sends them: mSpeed reads them too. It
+ * hides its route card after 12 s without one, and MConfig+ only passes a turn on when it changes.
  */
 internal object GeelyHudBroadcasts {
     private const val TAG = "DiPlay-GeelyHud"
     const val MCONFIG_PACKAGE = "plus.monjaro"
+    private const val MSPEED_PACKAGE = "ru.stellar.mspeed"
     const val ACTION_MANEUVER = "com.yandex.MANEUVER"
     const val ACTION_DISTANCE_TO_TURN = "com.yandex.NIXT"
     const val ACTION_STREET = "com.yandex.NEXTSTREET"
@@ -73,14 +78,17 @@ internal object GeelyHudBroadcasts {
     fun attach(appContext: Context) {
         if (context != null) return
         val app = appContext.applicationContext
-        if (!installed(app)) return
+        if (!installed(app) && !installed(app, MSPEED_PACKAGE)) return
         context = app
         worker.post(tick)
-        Log.i(TAG, "sending CarPlay guidance to MConfig+")
+        Log.i(TAG, "sending CarPlay guidance to MConfig+ and mSpeed")
     }
 
-    internal fun installed(context: Context): Boolean = try {
-        context.packageManager.getPackageInfo(MCONFIG_PACKAGE, 0)
+    /** Whether MConfig+ is installed. */
+    internal fun installed(context: Context): Boolean = installed(context, MCONFIG_PACKAGE)
+
+    private fun installed(context: Context, packageName: String): Boolean = try {
+        context.packageManager.getPackageInfo(packageName, 0)
         true
     } catch (_: PackageManager.NameNotFoundException) {
         false
@@ -116,7 +124,7 @@ internal object GeelyHudBroadcasts {
     }
 
     private fun send(context: Context, intent: Intent) {
-        context.sendBroadcast(intent.setPackage(MCONFIG_PACKAGE))
+        context.sendBroadcast(intent)
     }
 
     fun turn(context: Context, glance: CarPlayGlance.Snapshot): GeelyHudTurn? {
