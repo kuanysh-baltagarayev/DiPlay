@@ -736,6 +736,7 @@
     <string name="update_verifying">Перевірка…</string>
     <string name="update_install">Установити %1$s</string>
     <string name="update_failed">Не вдалося оновити</string>
+    <string name="update_installing_quietly">Встановлюється у фоні. CarPlay перезапуститься приблизно за хвилину.</string>
     <string name="update_available_home">Доступне оновлення</string>
     <string name="update_saved_to">Збережено в %1$s</string>
     <string name="backup_title">Резервна копія налаштувань</string>

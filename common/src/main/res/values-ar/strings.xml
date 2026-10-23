@@ -724,6 +724,7 @@
     <string name="update_verifying">جارٍ التحقق…</string>
     <string name="update_install">تثبيت %1$s</string>
     <string name="update_failed">فشل التحديث</string>
+    <string name="update_installing_quietly">يجري التثبيت في الخلفية. سيُعاد تشغيل CarPlay خلال دقيقة تقريبًا.</string>
     <string name="update_available_home">يتوفر تحديث</string>
     <string name="update_saved_to">تم الحفظ في %1$s</string>
     <string name="backup_title">نسخة احتياطية من الإعدادات</string>

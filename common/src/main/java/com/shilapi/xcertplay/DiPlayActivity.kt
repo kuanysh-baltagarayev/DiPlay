@@ -98,6 +98,7 @@ import com.shilapi.xcertplay.update.UpdateCatalog
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
 import com.shilapi.xcertplay.update.UpdateRelease
+import com.shilapi.xcertplay.update.GeelyUpdates
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import java.io.File
 import java.io.IOException
@@ -379,6 +380,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
             openProjection(); finish(); return
         }
+        GeelyUpdates.attach(applicationContext)
         scheduleBackgroundUpdateChecks()
         availableUpdate = UpdateAvailability.available(this, version())
         enforceInterfaceSize()
@@ -2772,7 +2774,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun installUpdate() {
         // No unknown-sources pre-check: some head units answer its settings page with "Not supported yet".
         // The chosen installer asks for that permission itself.
-        installApk(updateFile ?: return)
+        val file = updateFile ?: return
+        if (!GeelyUpdates.active) return installApk(file)
+        // The private car build installs through adbd without a dialog; the installer is the fallback.
+        val generation = updateGeneration
+        updateInstallWorker(Runnable {
+            val started = GeelyUpdates.installQuietly(applicationContext, file)
+            runOnUiThread {
+                if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                if (!started) return@runOnUiThread installApk(file)
+                UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), "adb")
+                updateMessage = getString(R.string.update_installing_quietly)
+                render()
+            }
+        })
     }
 
     private fun installApk(file: File) {

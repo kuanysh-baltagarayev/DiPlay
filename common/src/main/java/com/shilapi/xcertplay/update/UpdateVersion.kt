@@ -9,6 +9,7 @@ internal object UpdateVersion {
         }
 
     internal fun isNewer(remote: String, installed: String): Boolean {
+        GeelyUpdates.isNewer(remote, installed)?.let { return it }
         val target = parse(remote) ?: return false
         val current = parse(installed) ?: return true
         if (target.first != current.first) return target.first > current.first

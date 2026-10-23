@@ -36,8 +36,8 @@ internal object UpdateCatalog {
             for (assetIndex in 0 until assets.length()) {
                 val asset = assets.optJSONObject(assetIndex) ?: continue
                 val name = asset.optString("name")
-                val url = asset.optString("browser_download_url")
-                if (!isDownloadUrl(url)) continue
+                val url = GeelyUpdates.assetUrl(asset)
+                if (!isDownloadUrl(url) && !GeelyUpdates.isOwnAssetUrl(url)) continue
                 if (APK_NAME.matches(name)) {
                     apkName = name
                     apkUrl = url

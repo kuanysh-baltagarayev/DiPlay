@@ -889,6 +889,7 @@
     <string name="update_verifying">検証しています…</string>
     <string name="update_install">%1$sをインストール</string>
     <string name="update_failed">更新に失敗しました</string>
+    <string name="update_installing_quietly">バックグラウンドでインストールしています。約1分後にCarPlayが再起動します。</string>
     <string name="update_available_home">更新が利用できます</string>
     <string name="update_saved_to">%1$sに保存しました</string>
     <string name="backup_title">設定をバックアップ</string>
