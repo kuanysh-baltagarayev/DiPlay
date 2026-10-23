@@ -28,10 +28,14 @@ internal object GeelyUpdates {
     private const val INSTALL_DIRECTORY = "update"
     private const val SCRIPT = "install.sh"
     private const val LOG = "install.log"
+    // pm reads the file as the shell; the shell's own directory, as `adb install` uses.
+    private const val TMP_APK = "/data/local/tmp/diplay-update.apk"
 
     @Volatile private var repo: String? = null
     @Volatile private var token: String? = null
     @Volatile private var attached = false
+    @Volatile private var installStartedAt = 0L
+    private const val INSTALL_GUARD_MILLIS = 3 * 60 * 1000L
 
     fun attach(context: Context) {
         if (attached) return
@@ -62,6 +66,10 @@ internal object GeelyUpdates {
         return headers
     }
 
+    /** Whether a cached release came from this source; one found by an older build may be upstream's. */
+    fun ownRelease(apkUrl: String): Boolean =
+        !active || apkUrl.startsWith("https://api.github.com/repos/$repo/")
+
     /** A private repository's files download only through the API, with the token. */
     fun assetUrl(asset: JSONObject): String =
         asset.optString(if (active) "url" else "browser_download_url")
@@ -88,27 +96,43 @@ internal object GeelyUpdates {
      * Starts the install through adbd, or returns false when DiPlay has no approved access to it and
      * the system installer has to ask instead. Blocking: run it off the main thread.
      */
+    @Synchronized
     fun installQuietly(context: Context, apk: File): Boolean {
         if (!active) return false
-        val directory = File(context.getExternalFilesDir(null) ?: return false, INSTALL_DIRECTORY)
-        if (!directory.isDirectory && !directory.mkdirs()) return false
-        // The app's external files are readable by the adbd shell, its private cache is not.
-        val copy = if (apk.parentFile == directory) apk else apk.copyTo(File(directory, apk.name), overwrite = true)
-        val log = File(directory, LOG).apply { delete() }
-        val script = File(directory, SCRIPT)
-        script.writeText(script(context.packageName, copy, log))
-        val adb = LocalAdb(AdbKeys.load(context))
+        // A second tap while the first install runs would start another one.
+        if (System.currentTimeMillis() - installStartedAt < INSTALL_GUARD_MILLIS) return true
+        var adb: LocalAdb? = null
         return try {
-            if (adb.connect(mayAsk = false) != LocalAdb.Access.READY) return false
+            val directory = File(context.getExternalFilesDir(null) ?: return false, INSTALL_DIRECTORY)
+            if (!directory.isDirectory && !directory.mkdirs()) return false
+            // The app's external files are readable by the adbd shell, its private cache is not.
+            val copy = if (apk.parentFile == directory) apk else apk.copyTo(File(directory, apk.name), overwrite = true)
+            val log = File(directory, LOG).apply { delete() }
+            val script = File(directory, SCRIPT)
+            script.writeText(script(context.packageName, copy, log))
+            val local = LocalAdb(AdbKeys.load(context)).also { adb = it }
+            if (local.connect(mayAsk = false) != LocalAdb.Access.READY) return false
             // Detached: installing the package ends this process, and adbd closes the stream with it.
             val path = quote(script.absolutePath)
-            adb.shell("(command -v setsid >/dev/null && setsid sh $path || nohup sh $path) </dev/null >/dev/null 2>&1 &") != null
+            val started = local.shell("(command -v setsid >/dev/null && setsid sh $path || nohup sh $path) </dev/null >/dev/null 2>&1 &") != null
+            if (started) installStartedAt = System.currentTimeMillis()
+            started
         } catch (failure: Exception) {
             Log.w(TAG, "quiet install failed to start", failure)
             false
         } finally {
-            adb.close()
+            adb?.close()
         }
+    }
+
+    /** The package manager's refusal once the started install failed, or null while it runs or after it worked. */
+    fun installFailure(context: Context): String? {
+        val log = context.getExternalFilesDir(null)?.let { File(File(it, INSTALL_DIRECTORY), LOG) } ?: return null
+        val lines = runCatching { log.readLines() }.getOrNull() ?: return null
+        val status = lines.firstOrNull { it.startsWith("pm=") }?.removePrefix("pm=") ?: return null
+        if (status == "0") return null
+        installStartedAt = 0L
+        return lines.lastOrNull { it.startsWith("Failure") || it.startsWith("Error") } ?: "pm=$status"
     }
 
     internal fun script(packageName: String, apk: File, log: File): String {
@@ -117,8 +141,9 @@ internal object GeelyUpdates {
         return """
             sleep 1
             echo "install ${apk.name}" > $logPath
-            pm install -r ${quote(apk.absolutePath)} >> $logPath 2>&1
+            cp ${quote(apk.absolutePath)} $TMP_APK && pm install -r $TMP_APK >> $logPath 2>&1
             echo "pm=${'$'}?" >> $logPath
+            rm -f $TMP_APK
             sleep 3
             ( $accessibility ) >> $logPath 2>&1
             echo "accessibility=${'$'}?" >> $logPath

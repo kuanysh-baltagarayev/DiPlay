@@ -2786,6 +2786,24 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), "adb")
                 updateMessage = getString(R.string.update_installing_quietly)
                 render()
+                watchQuietInstall(generation)
+            }
+        })
+    }
+
+    // A working install ends this process. One that fails leaves it running, so tell the driver why.
+    private fun watchQuietInstall(generation: Int) {
+        updateInstallWorker(Runnable {
+            repeat(QUIET_INSTALL_WATCH_SECONDS) {
+                Thread.sleep(1_000)
+                val failure = GeelyUpdates.installFailure(applicationContext) ?: return@repeat
+                runOnUiThread {
+                    if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                    UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), "adb failed=$failure")
+                    updateMessage = "${getString(R.string.update_failed)}: $failure"
+                    render()
+                }
+                return@Runnable
             }
         })
     }
@@ -6937,6 +6955,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val FOCUS_RING get() = palette.focusRing
 
     companion object {
+        /** pm install of DiPlay takes well under this on the KX11. */
+        private const val QUIET_INSTALL_WATCH_SECONDS = 180
+
         private fun alignedTextCentreY(
             view: TextView,
             text: CharSequence,
