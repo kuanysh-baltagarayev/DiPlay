@@ -116,30 +116,6 @@
             android:theme="@style/Theme.AdbCluster">
         </activity>
 
-        <!-- Geely/ECARX: shows or hides CarPlay's map on the instrument cluster and closes at once.
-             The launcher alias is enabled at run time only where GeelyClusterMap is available. -->
-        <activity
-            android:name="com.shilapi.xcertplay.GeelyClusterMapToggleActivity"
-            android:label="@string/geely_cluster_map_toggle_label"
-            android:icon="@drawable/ic_dp_navigation"
-            android:taskAffinity="${applicationId}.clustertoggle"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:exported="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <activity-alias
-            android:name="com.shilapi.xcertplay.GeelyClusterMapLauncher"
-            android:targetActivity="com.shilapi.xcertplay.GeelyClusterMapToggleActivity"
-            android:label="@string/geely_cluster_map_toggle_label"
-            android:icon="@drawable/ic_dp_navigation"
-            android:enabled="false"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-
         <activity
             android:name="com.shilapi.xcertplay.CarPlayVideoActivity"
             android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
