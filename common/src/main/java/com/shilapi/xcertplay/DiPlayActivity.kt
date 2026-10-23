@@ -1997,6 +1997,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     AirPlayPersistence.saveHideBydCallPopup(this, it)
                 }
             }
+            if (EcarxWheelSpeed.present()) {
+                // ECARX reads the gear without ADB, so video in car needs no BYD vehicle data setup here.
+                toggle(card, getString(R.string.video_while_parked),
+                    getString(R.string.settings_ecarx_video_while_parked_description),
+                    BydOutputSettings.videoWhileParked(this)) {
+                    BydOutputSettings.setVideoWhileParked(this, it)
+                    markReconnectNeeded()
+                }
+            }
             toggle(card, getString(R.string.efficient_video), getString(R.string.use_hevc_leave_off_for_the_widest_head_unit_compatibility), AirPlayPersistence.loadHevcEnabled(this)) {
                 AirPlayPersistence.saveHevcEnabled(this, it)
                 markReconnectNeeded()

@@ -67,8 +67,10 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         override fun latestNmea(): String? = null
     }
 
+    private val sdkPresent by lazy { runCatching { Class.forName(CAR); Class.forName(SENSOR) }.isSuccess }
+
     /** Whether the ECARX car SDK is on this head unit. */
-    fun present(): Boolean = runCatching { Class.forName(CAR); Class.forName(SENSOR) }.isSuccess
+    fun present(): Boolean = sdkPresent
 
     fun attach(appContext: Context) = apply { context = appContext.applicationContext }
 
@@ -119,6 +121,19 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         GEAR_DRIVE, in GEAR_FORWARD -> VehicleGear.DRIVE
         else -> null
     }
+
+    /**
+     * Whether the car is in P, or null when the gear cannot be read; for video in car, which plays only
+     * in P. Blocking (a binder call); the video gate reads it once a second.
+     */
+    fun parked(appContext: Context): Boolean? {
+        attach(appContext)
+        val sensor = sensor() ?: return null
+        val event = runCatching { call(sensor, "getSensorEvent", SENSOR_TYPE_GEAR) as Int }.getOrNull() ?: return null
+        return parked(event)
+    }
+
+    internal fun parked(event: Int): Boolean? = gear(event)?.let { it == VehicleGear.PARK }
 
     internal fun metersPerSecond(raw: Float): Double? =
         raw.toDouble().takeIf { it.isFinite() && it in 0.0..MAX_METERS_PER_SECOND }

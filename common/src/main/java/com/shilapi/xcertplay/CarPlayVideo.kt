@@ -54,7 +54,9 @@ internal object CarPlayVideo : CarPlayVideoListener {
         next.videoListener = this
     }
 
-    override fun readParked(): Boolean? = appContext?.let(BydNavigationOutputs::parked)
+    override fun readParked(): Boolean? = appContext?.let {
+        if (EcarxWheelSpeed.present()) EcarxWheelSpeed.parked(it) else BydNavigationOutputs.parked(it)
+    }
 
     override fun onVideoAllowedChanged(allowed: Boolean) {
         if (!allowed) main.post { closePlayer("the car left P") }
