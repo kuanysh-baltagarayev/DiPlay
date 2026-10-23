@@ -1,11 +1,9 @@
 package com.shilapi.xcertplay
 
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -38,9 +36,10 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * asked for a stream of exactly that size. No safe area is set: the cluster's icons and texts change
  * with the car's state, and they are drawn over the map, so they stay visible whatever lies under them.
  *
- * DiPlay switches the DIM itself ([EcarxDim]) when the window opens and closes. It is opened by
- * [toggle] (the "Map on cluster" launcher entry, [GeelyClusterMapToggleActivity]) or by MConfig+
- * 48.2's action "DiAuto/DiPlay карта на приборке", which sends [ACTION_SHOW]; DiPlay answers
+ * DiPlay switches the DIM itself ([EcarxDim]) when the window opens and closes, unless another app
+ * (a cluster dashboard such as mSpeed) already holds map mode: then the mode is left as it is. The
+ * window is opened by MConfig+ 48.2's action "DiAuto/DiPlay карта на приборке", which sends
+ * [ACTION_SHOW], or by [ACTION_TOGGLE]; DiPlay answers
  * [ACTION_SHOWN]. [ACTION_HIDE] removes the window and sends [ACTION_END]; a session that ends while
  * the map is shown sends [ACTION_END] and gives the cluster its stock view back, and so does the next
  * start after a process that died with the map shown (without END: nothing is listening then).
@@ -68,7 +67,6 @@ internal object GeelyClusterMap {
     private const val KEY_H = "h"
     /** Set while DiPlay holds the cluster in map mode, so a killed process is undone at the next start. */
     private const val KEY_HELD = "dim_held"
-    private const val TOGGLE_ALIAS = "com.shilapi.xcertplay.GeelyClusterMapLauncher"
     /** ECARX names every extra display "HDMI", so the canvas that reaches the cluster is found by id. */
     private const val DISPLAY_ID = 2
     /** BYD's own cluster display; DiPlay's BYD cluster output owns those head units. */
@@ -93,6 +91,7 @@ internal object GeelyClusterMap {
     private var turnCard: ClusterTurnCardView? = null // main thread
     private var card = TurnCard(null, 0, 0, 0, 0, false) // main thread
     private var ownSwitchAt = 0L // main thread, elapsedRealtime of DiPlay's last DIM switch
+    private var ownsDim = false // main thread: DiPlay switched the cluster to map mode for this window
 
     /**
      * The map window on the cluster canvas, by default all of it. Width and height are multiples of 8,
@@ -143,7 +142,6 @@ internal object GeelyClusterMap {
         if (context != null || !available(appContext)) return
         val app = appContext.applicationContext
         context = app
-        enableLauncherEntry(app)
         releaseStale(app)
         BydNavigationOutputs.clusterUiFilter = { requested -> requested && wanted }
         CarPlayGlance.connectionListener = { next -> main.post { onConnected(next) } }
@@ -181,8 +179,7 @@ internal object GeelyClusterMap {
     private val checkNaviMode = Runnable {
         val app = context ?: return@Runnable
         if (root == null || SystemClock.elapsedRealtime() - ownSwitchAt < OWN_SWITCH_GRACE_MILLIS) return@Runnable
-        val mode = runCatching { Settings.Global.getInt(app.contentResolver, NAVI_MODE_SETTING) }.getOrNull()
-            ?: return@Runnable
+        val mode = naviMode(app) ?: return@Runnable
         if (mode == EcarxDim.NAVI_MODE_FULL) return@Runnable
         Log.i(TAG, "the cluster left map mode (NaviMode $mode) without DiPlay; closing the map window")
         wanted = false
@@ -227,13 +224,6 @@ internal object GeelyClusterMap {
             runCatching { manager.updateViewLayout(frame, windowParams(next)) }
         }
         Log.i(TAG, "cluster map window $old -> $next; the stream size follows at the next connection")
-    }
-
-    private fun enableLauncherEntry(app: Context) {
-        runCatching {
-            app.packageManager.setComponentEnabledSetting(ComponentName(app, TOGGLE_ALIAS),
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-        }.onFailure { Log.w(TAG, "launcher entry not enabled", it) }
     }
 
     /** A process killed while it held the cluster leaves it on display 2's last frame or black. */
@@ -291,11 +281,17 @@ internal object GeelyClusterMap {
             root = frame
             turnCard = cardView
             applyTurnCard()
-            setHeld(app, true)
-            ownSwitchAt = SystemClock.elapsedRealtime()
-            EcarxDim.switch(app, true)
+            // A cluster dashboard (mSpeed, Monjaro Dashboard) may already hold map mode to draw on display 2.
+            // Then DiPlay only lays its window over it and leaves the mode alone on hide, as MConfig+ does.
+            ownsDim = naviMode(app) != EcarxDim.NAVI_MODE_FULL
+            if (ownsDim) {
+                setHeld(app, true)
+                ownSwitchAt = SystemClock.elapsedRealtime()
+                EcarxDim.switch(app, true)
+            }
             send(ACTION_SHOWN)
-            Log.i(TAG, "cluster map window $layout shown on display $DISPLAY_ID")
+            Log.i(TAG, "cluster map window $layout shown on display $DISPLAY_ID; " +
+                if (ownsDim) "cluster switched to map mode" else "cluster already in map mode, left as it is")
         }.onFailure { Log.w(TAG, "cluster map window failed", it) }.isSuccess
     }
 
@@ -315,17 +311,22 @@ internal object GeelyClusterMap {
         } else displayContext
     }
 
-    /** [restoreCluster] false: the cluster already left map mode on its own, so it is left as it is. */
+    /**
+     * [restoreCluster] false: the cluster already left map mode on its own, so it is left as it is. The
+     * stock view also stays when another app held map mode before the window opened.
+     */
     private fun close(restoreCluster: Boolean = true) {
         val frame = root
         val manager = window
         root = null
         window = null
         turnCard = null
+        val owned = ownsDim
+        ownsDim = false
         if (frame == null || manager == null) return
         runCatching { manager.removeViewImmediate(frame) }
         context?.let { app ->
-            if (restoreCluster) {
+            if (restoreCluster && owned) {
                 ownSwitchAt = SystemClock.elapsedRealtime()
                 EcarxDim.switch(app, false)
             }
@@ -333,6 +334,9 @@ internal object GeelyClusterMap {
         }
         Log.i(TAG, "cluster map window closed")
     }
+
+    private fun naviMode(app: Context): Int? =
+        runCatching { Settings.Global.getInt(app.contentResolver, NAVI_MODE_SETTING) }.getOrNull()
 
     private fun applyTurnCard() {
         val view = turnCard ?: return
