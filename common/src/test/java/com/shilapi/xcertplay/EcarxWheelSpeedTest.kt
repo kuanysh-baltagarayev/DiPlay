@@ -17,6 +17,14 @@ class EcarxWheelSpeedTest {
         assertNull(EcarxWheelSpeed.gear(2097664))
     }
 
+    @Test fun videoInCarCountsOnlyParkAsParked() {
+        assertEquals(true, EcarxWheelSpeed.parked(2097712))
+        assertEquals(false, EcarxWheelSpeed.parked(2097728)) // R
+        assertEquals(false, EcarxWheelSpeed.parked(2097680)) // N
+        assertEquals(false, EcarxWheelSpeed.parked(2097696)) // D
+        assertNull(EcarxWheelSpeed.parked(-1)) // GEAR_UNKNOWN keeps video off
+    }
+
     @Test fun theRawSpeedIsTakenAsMetersPerSecond() {
         assertEquals(0.0, EcarxWheelSpeed.metersPerSecond(0f)!!, 0.0)
         assertEquals(16.5, EcarxWheelSpeed.metersPerSecond(16.5f)!!, 1e-6)
