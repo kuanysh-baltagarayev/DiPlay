@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.host.R
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,8 +39,10 @@ internal data class GeelyHudTurn(
  * clear the HUD. Runs only where MConfig+ or the cluster dashboard mSpeed is installed; the turn
  * comes from [CarPlayGlance].
  *
- * The broadcasts go to every app, as the patched Navigator sends them: mSpeed reads them too. It
- * hides its route card after 12 s without one, and MConfig+ only passes a turn on when it changes.
+ * mSpeed (`ru.stellar.mspeed`, a cluster dashboard) gets the turn as MConfig+ passes it on,
+ * `plus.monjaro.NAVIGATION_UPDATE`, at the same 1-3 s pace: it hides its route card after 12 s
+ * without an update, and MConfig+ passes a turn on only when it changes. Not as `com.yandex.*`:
+ * mSpeed reads `DISTANCE` as the distance to the turn, MConfig+ as what is left of the route.
  */
 internal object GeelyHudBroadcasts {
     private const val TAG = "DiPlay-GeelyHud"
@@ -53,6 +56,8 @@ internal object GeelyHudBroadcasts {
     const val ACTION_REMAINING_TIME = "com.yandex.TIME"
     const val ACTION_ALIVE = "hud.NAVI_ALIVE"
     const val ACTION_END = "hud.NAVI_END"
+    const val ACTION_NAVIGATION_UPDATE = "plus.monjaro.NAVIGATION_UPDATE"
+    const val ACTION_NAVIGATION_ENDED = "plus.monjaro.NAVIGATION_ENDED"
     private const val TICK_MILLIS = 1_000L
     /** MConfig+ 48.1 clears the HUD after 10 s without `hud.NAVI_ALIVE`. */
     private const val RESEND_MILLIS = 3_000L
@@ -67,6 +72,7 @@ internal object GeelyHudBroadcasts {
     private var sentAt = 0L // worker thread
     private var arrowKey: Pair<Int, Int?>? = null // worker thread
     private var arrowBitmap: Bitmap? = null // worker thread
+    private var arrowPng: ByteArray? = null // worker thread
 
     private val tick = object : Runnable {
         override fun run() {
@@ -101,6 +107,7 @@ internal object GeelyHudBroadcasts {
         if (turn == null) {
             if (sent != null) {
                 send(app, Intent(ACTION_END))
+                app.sendBroadcast(Intent(ACTION_NAVIGATION_ENDED).setPackage(MSPEED_PACKAGE))
                 sent = null
                 Log.i(TAG, "route ended")
             }
@@ -114,17 +121,37 @@ internal object GeelyHudBroadcasts {
     }
 
     private fun sendTurn(context: Context, turn: GeelyHudTurn) {
-        arrow(context, turn.arrow, turn.exit)?.let { send(context, Intent(ACTION_MANEUVER).putExtra("maneuver_bitmap", it)) }
+        val arrow = arrow(context, turn.arrow, turn.exit)
+        arrow?.let { send(context, Intent(ACTION_MANEUVER).putExtra("maneuver_bitmap", it)) }
         send(context, Intent(ACTION_DISTANCE_TO_TURN).putExtra("next_text", turn.distance))
         if (turn.road.isNotEmpty()) send(context, Intent(ACTION_STREET).putExtra("next_street", turn.road))
         turn.arrival?.let { send(context, Intent(ACTION_ARRIVAL).putExtra("Arrival_text", it)) }
         turn.remainingDistance?.let { send(context, Intent(ACTION_REMAINING_DISTANCE).putExtra("Distance_text", it)) }
         turn.remainingTime?.let { send(context, Intent(ACTION_REMAINING_TIME).putExtra("Time_text", it)) }
         send(context, Intent(ACTION_ALIVE))
+        // The same fields MConfig+ 48.2 puts in its NAVIGATION_UPDATE, so mSpeed shows one card from both.
+        val update = Intent(ACTION_NAVIGATION_UPDATE)
+            .putExtra("title", turn.distance)
+            .putExtra("text", turn.road)
+            .putExtra("subtext", progress(turn))
+            .putExtra("source", "diplay")
+            .putExtra("timestamp", System.currentTimeMillis())
+        val png = arrowPng.takeIf { arrow != null }
+        if (png != null) {
+            update.putExtra("has_image", true).putExtra("image_bytes", png)
+                .putExtra("image_width", ARROW_BITMAP_SIZE).putExtra("image_height", ARROW_BITMAP_SIZE)
+        } else {
+            update.putExtra("has_image", false)
+        }
+        context.sendBroadcast(update.setPackage(MSPEED_PACKAGE))
     }
 
+    /** What is left of the route, as MConfig+ joins it for `subtext`: "5,0 км • 14 мин • 11:49". */
+    internal fun progress(turn: GeelyHudTurn): String =
+        listOfNotNull(turn.remainingDistance, turn.remainingTime, turn.arrival).filter { it.isNotBlank() }.joinToString(" • ")
+
     private fun send(context: Context, intent: Intent) {
-        context.sendBroadcast(intent)
+        context.sendBroadcast(intent.setPackage(MCONFIG_PACKAGE))
     }
 
     fun turn(context: Context, glance: CarPlayGlance.Snapshot): GeelyHudTurn? {
@@ -170,6 +197,7 @@ internal object GeelyHudBroadcasts {
         }
         arrowKey = res to exit
         arrowBitmap = bitmap
+        arrowPng = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
         return bitmap
     }
 

@@ -37,6 +37,15 @@ class GeelyHudBroadcastsTest {
         assertNull(turn.arrival)
     }
 
+    @Test fun theProgressLineIsJoinedAsMConfigJoinsIt() {
+        val turn = GeelyHudTurn(
+            arrow = 0, exit = null, distance = "250 м", road = "",
+            arrival = "11:49", remainingDistance = "5,0 км", remainingTime = "14 мин",
+        )
+        assertEquals("5,0 км • 14 мин • 11:49", GeelyHudBroadcasts.progress(turn))
+        assertEquals("14 мин", GeelyHudBroadcasts.progress(turn.copy(arrival = null, remainingDistance = "")))
+    }
+
     @Test fun longDistancesAndDurations() {
         val turn = GeelyHudBroadcasts.turn(
             context,
