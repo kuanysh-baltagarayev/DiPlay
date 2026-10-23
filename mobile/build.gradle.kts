@@ -12,6 +12,13 @@ val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSET
 // com.shihab.diplay.hudtest and installs next to another DiPlay.
 val carPackage = providers.environmentVariable("DIPLAY_CAR_PACKAGE").orNull == "1"
 
+// A car build published for over-the-air updates (DiPlay_builds/publish.sh): its build number goes into
+// the version (0.2.21-geely.N, versionCode 40000 + N), and the private repository it updates from and
+// a read-only token for it go into the manifest. Ordinary builds keep the upstream update source.
+val buildNumber = providers.environmentVariable("DIPLAY_BUILD_NUMBER").orNull?.toInt()?.takeIf { carPackage }
+val updateRepo = providers.environmentVariable("DIPLAY_UPDATE_REPO").orNull.orEmpty().takeIf { carPackage }.orEmpty()
+val updateToken = providers.environmentVariable("DIPLAY_UPDATE_TOKEN").orNull.orEmpty().takeIf { carPackage }.orEmpty()
+
 android {
     namespace = "com.shilapi.xcertplay"
     compileSdk {
@@ -26,6 +33,9 @@ android {
         versionName = "0.2.21"
 
     }
+    buildNumber?.let { defaultConfig.versionCode = defaultConfig.versionCode!! * 1000 + it }
+    defaultConfig.manifestPlaceholders["diplayUpdateRepo"] = updateRepo
+    defaultConfig.manifestPlaceholders["diplayUpdateToken"] = updateToken
 
 
     localAuthenticationAssets?.let { sourceSets.getByName("main").assets.srcDir(it) }
@@ -45,7 +55,7 @@ android {
     buildTypes {
         debug {
             if (!carPackage) applicationIdSuffix = ".hudtest"
-            versionNameSuffix = if (carPackage) "-geely" else "-hud-test-geelyhud"
+            versionNameSuffix = if (carPackage) "-geely" + (buildNumber?.let { ".$it" } ?: "") else "-hud-test-geelyhud"
         }
         release {
             optimization {

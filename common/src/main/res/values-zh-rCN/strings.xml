@@ -834,6 +834,7 @@
     <string name="update_verifying">正在校验…</string>
     <string name="update_install">安装 %1$s</string>
     <string name="update_failed">更新失败</string>
+    <string name="update_installing_quietly">正在后台安装。CarPlay 将在约一分钟后重新启动。</string>
     <string name="update_available_home">有可用更新</string>
     <string name="update_saved_to">已保存到 %1$s</string>
     <string name="backup_title">备份设置</string>

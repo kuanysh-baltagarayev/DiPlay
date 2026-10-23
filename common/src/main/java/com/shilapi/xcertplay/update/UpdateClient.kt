@@ -30,6 +30,7 @@ internal object UpdateClient {
             connection.readTimeout = READ_TIMEOUT_MILLIS
             connection.useCaches = false
             accept?.let { connection.setRequestProperty("Accept", it) }
+            GeelyUpdates.headers(url).forEach { (name, value) -> connection.setRequestProperty(name, value) }
             connection.setRequestProperty("User-Agent", userAgent)
             val statusCode = connection.responseCode
             val stream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
@@ -48,6 +49,7 @@ internal object UpdateClient {
             connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
             connection.readTimeout = READ_TIMEOUT_MILLIS
             connection.useCaches = false
+            GeelyUpdates.headers(url).forEach { (name, value) -> connection.setRequestProperty(name, value) }
             val statusCode = connection.responseCode
             if (statusCode !in 200..299) throw IOException("Download from $url failed: $statusCode")
             val total = connection.contentLengthLong.takeIf { it > 0 }

@@ -25,6 +25,7 @@ internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParame
     Worker(context, parameters) {
     override fun doWork(): Result {
         if (!UpdateAvailability.backgroundChecksEnabled(applicationContext)) return Result.success()
+        GeelyUpdates.attach(applicationContext)
         if (BackgroundUpdatePolicy.connectionBusy(
                 CarPlayBackgroundSession.hasSession(),
                 CarPlayBackgroundSession.active,

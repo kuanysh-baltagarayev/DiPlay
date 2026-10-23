@@ -10,7 +10,7 @@ internal object UpdateReleaseLookup {
         openConnection: (URL) -> URLConnection = { it.openConnection() },
     ): UpdateRelease? {
         val json = UpdateClient.fetchText(
-            UpdateClient.RELEASES_URL,
+            GeelyUpdates.releasesUrl(),
             "application/vnd.github+json",
             userAgent,
             openConnection,

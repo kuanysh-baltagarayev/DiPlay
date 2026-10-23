@@ -877,6 +877,7 @@
     <string name="update_verifying">Verifying…</string>
     <string name="update_install">Install %1$s</string>
     <string name="update_failed">Update failed</string>
+    <string name="update_installing_quietly">Installing in the background. CarPlay will restart in about a minute.</string>
     <string name="update_available_home">Update available</string>
     <string name="update_saved_to">Saved to %1$s</string>
     <string name="backup_title">Back up settings</string>

@@ -18,6 +18,14 @@
             android:name="android.allow_multiple_resumed_activities"
             android:value="true" />
 
+        <!-- A private car build's own update source; empty in ordinary builds (see GeelyUpdates). -->
+        <meta-data
+            android:name="com.shilapi.xcertplay.UPDATE_REPO"
+            android:value="${diplayUpdateRepo}" />
+        <meta-data
+            android:name="com.shilapi.xcertplay.UPDATE_TOKEN"
+            android:value="${diplayUpdateToken}" />
+
         <!-- Based on the split-screen metadata declared by DiLink system apps. -->
         <meta-data
             android:name="BYD_SUPPORT_SPLIT_ACTIVITY"
