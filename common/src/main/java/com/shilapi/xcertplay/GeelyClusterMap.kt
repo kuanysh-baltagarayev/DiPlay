@@ -41,12 +41,13 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * DiPlay switches the DIM itself ([EcarxDim]) when the window opens and closes. It is opened by
  * [toggle] (the "Map on cluster" launcher entry, [GeelyClusterMapToggleActivity]) or by MConfig+
  * 48.2's action "DiAuto/DiPlay карта на приборке", which sends [ACTION_SHOW]; DiPlay answers
- * [ACTION_SHOWN]. [ACTION_HIDE] removes the window; a session that ends while the map is shown
- * sends [ACTION_END] and gives the cluster its stock view back, and so does the next start after a
- * process that died with the map shown. When something else gives the cluster its stock view back
- * (MConfig+'s own toggle, the cluster menu, the car), the global NaviMode setting changes and the
- * window closes too, so DiPlay does not keep a map the cluster no longer shows. While the window is not shown the iPhone is asked not to
- * draw the cluster map (stopUI). [ACTION_LAYOUT] moves or resizes the window (extras x, y, w, h);
+ * [ACTION_SHOWN]. [ACTION_HIDE] removes the window and sends [ACTION_END]; a session that ends while
+ * the map is shown sends [ACTION_END] and gives the cluster its stock view back, and so does the next
+ * start after a process that died with the map shown (without END: nothing is listening then).
+ * When something else gives the cluster its stock view back (MConfig+'s own toggle, the cluster
+ * menu, the car), the global NaviMode setting changes, the window closes too and END is sent, so
+ * DiPlay does not keep a map the cluster no longer shows. While the window is not shown the iPhone
+ * is asked not to draw the cluster map (stopUI). [ACTION_LAYOUT] moves or resizes the window (extras x, y, w, h);
  * the stream follows at the next connection.
  */
 internal object GeelyClusterMap {
@@ -187,6 +188,7 @@ internal object GeelyClusterMap {
         wanted = false
         control(false)
         close(restoreCluster = false)
+        send(ACTION_END)
     }
 
     /** Shows the map when it is hidden and hides it when it is shown. Main thread. */
@@ -210,6 +212,7 @@ internal object GeelyClusterMap {
         wanted = false
         control(false)
         close()
+        send(ACTION_END)
     }
 
     private fun relayout(intent: Intent) {
@@ -344,8 +347,12 @@ internal object GeelyClusterMap {
         worker.post { runCatching { BydNavigationOutputs.clusterStreamControl(shown) } }
     }
 
+    /**
+     * To every app, as the MConfig+ author's mod does: besides MConfig+, apps such as mSpeed follow
+     * SHOWN and END to clear the cluster area under the map.
+     */
     private fun send(action: String) {
-        runCatching { context?.sendBroadcast(Intent(action).setPackage(GeelyHudBroadcasts.MCONFIG_PACKAGE)) }
+        runCatching { context?.sendBroadcast(Intent(action)) }
     }
 
     private class MirrorSurface : TextureView.SurfaceTextureListener {
