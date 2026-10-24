@@ -55,7 +55,7 @@ android {
     buildTypes {
         debug {
             if (!carPackage) applicationIdSuffix = ".hudtest"
-            versionNameSuffix = if (carPackage) "-geely" + (buildNumber?.let { ".$it" } ?: "") else "-hud-test-geelyhud"
+            versionNameSuffix = if (carPackage) "-geely" + (buildNumber?.let { ".$it" } ?: "") else "-hud-test"
         }
         release {
             optimization {

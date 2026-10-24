@@ -24,6 +24,8 @@
         <package android:name="com.byd.carsettings" />
         <!-- MConfig+, which draws CarPlay guidance on the Geely/ECARX HUD (GeelyHudBroadcasts). -->
         <package android:name="plus.monjaro" />
+        <!-- mSpeed, a cluster dashboard that shows the same guidance. -->
+        <package android:name="ru.stellar.mspeed" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="content" android:mimeType="application/vnd.android.package-archive" />
