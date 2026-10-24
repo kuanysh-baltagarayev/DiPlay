@@ -5527,9 +5527,10 @@ class CarPlayHostActivity : ComponentActivity() {
                 !config.locationReportingEnabled -> null
                 config.identification.vehicleSpeedEnabled &&
                     !com.shilapi.xcertplay.hud.BydOutputSettings.wheelSpeedToIphoneActive(this) ->
-                    // ECARX: the head unit has no GPS of its own, so only the wheel speed goes to the iPhone.
+                    // ECARX: the KX11 has no GPS of its own, so only the wheel speed goes to the iPhone there;
+                    // a unit with a receiver keeps sending its position.
                     VehicleSpeedLocationProvider(
-                        EcarxWheelSpeed.NoPosition,
+                        if (EcarxWheelSpeed.hasGps(this)) AndroidCarPlayLocationProvider(this) else EcarxWheelSpeed.NoPosition,
                         EcarxWheelSpeed.attach(applicationContext),
                         log = ::appendLog,
                     )

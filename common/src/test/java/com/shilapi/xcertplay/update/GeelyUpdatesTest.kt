@@ -47,6 +47,7 @@ class GeelyUpdatesTest {
         val asset = GeelyUpdates.headers("https://api.github.com/repos/owner/builds/releases/assets/7")
         assertEquals("application/octet-stream", asset["Accept"])
         assertTrue(GeelyUpdates.headers("https://api.github.com/repos/other/builds/releases").isEmpty())
+        assertTrue(GeelyUpdates.headers("https://api.github.com/repos/Owner/Builds/releases/assets/7").isNotEmpty())
         assertTrue(GeelyUpdates.headers("https://objects.githubusercontent.com/x").isEmpty())
     }
 
@@ -55,6 +56,7 @@ class GeelyUpdatesTest {
         GeelyUpdates.configure("owner/builds", "secret")
         assertFalse(GeelyUpdates.ownRelease("https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.22/a.apk"))
         assertTrue(GeelyUpdates.ownRelease("https://api.github.com/repos/owner/builds/releases/assets/7"))
+        assertTrue(GeelyUpdates.ownRelease("https://api.github.com/repos/Owner/Builds/releases/assets/7"))
     }
 
     @Test fun privateFilesDownloadThroughTheApi() {
@@ -68,12 +70,16 @@ class GeelyUpdatesTest {
 
     @Test fun theScriptInstallsRestoresTheServiceAndReopensDiPlay() {
         val script = GeelyUpdates.script(
-            "com.shihab.diplay", File("/sdcard/update/DiPlay-0.2.21-geely.2.apk"), File("/sdcard/update/install.log"),
+            "com.shihab.diplay", File("/sdcard/update/DiPlay-0.2.21-geely.2.apk"), "ab".repeat(32),
+            File("/sdcard/update/install.log"),
         )
         val lines = script.lines()
         val install = lines.indexOfFirst {
-            it.startsWith("cp '/sdcard/update/DiPlay-0.2.21-geely.2.apk' /data/local/tmp/diplay-update.apk && pm install -r ")
+            it.trim().startsWith("pm install -r /data/local/tmp/diplay-update.apk")
         }
+        val copy = lines.indexOfFirst { it.startsWith("cp '/sdcard/update/DiPlay-0.2.21-geely.2.apk' /data/local/tmp/diplay-update.apk") }
+        val check = lines.indexOfFirst { "sha256sum /data/local/tmp/diplay-update.apk" in it && "ab".repeat(32) in it }
+        assertTrue(copy >= 0 && check > copy && install > check)
         val service = lines.indexOfFirst { "com.shihab.diplay/com.shilapi.xcertplay.UsbAutoConfirmService" in it }
         val reopen = lines.indexOfFirst { it.startsWith("am start -n 'com.shihab.diplay/com.shilapi.xcertplay.DiPlayActivity'") }
         assertTrue(install >= 0 && service > install && reopen > service)

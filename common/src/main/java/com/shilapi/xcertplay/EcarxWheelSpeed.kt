@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.SystemClock
 import android.util.Log
 import com.shilapi.xcertplay.transport.Iap2LocationProvider
@@ -37,9 +39,12 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     private const val READ_MILLIS = 250L
     private const val GEAR_EVERY_READS = 4
     private const val MAX_SAMPLES = 40
+    private const val RETRY_MILLIS = 5_000L
 
     @Volatile private var context: Context? = null
     @Volatile private var sensor: Any? = null
+    @Volatile private var speedSupported: Boolean? = null
+    @Volatile private var lastAttemptAt = 0L
     private var executor: ScheduledExecutorService? = null
     private val samples = ArrayList<VehicleSpeedSample>()
     private var gear: VehicleGear? = null
@@ -65,6 +70,12 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     fun present(): Boolean = sdkPresent
 
     fun attach(appContext: Context) = apply { context = appContext.applicationContext }
+
+    /** Whether this head unit has a GPS receiver of its own; the KX11 has none. */
+    fun hasGps(context: Context): Boolean = runCatching {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS) &&
+            context.getSystemService(LocationManager::class.java)?.allProviders?.contains(LocationManager.GPS_PROVIDER) == true
+    }.getOrDefault(false)
 
     @Synchronized
     override fun start() {
@@ -124,6 +135,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
             val changed = synchronized(this) { (gear != next).also { gear = next } }
             if (changed) Log.i(TAG, "gear $next (event $event)")
         }
+        if (!speedSupported(sensor)) return
         val before = SystemClock.elapsedRealtime()
         val raw = runCatching { call(sensor, "getSensorLatestValue", SENSOR_TYPE_CAR_SPEED) as Float }.getOrNull() ?: return
         val speed = metersPerSecond(raw) ?: return
@@ -139,23 +151,39 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     }
 
     /**
-     * The ECARX sensor manager, once it reports the speed sensor as supported. An unsupported sensor
-     * may read 0, and a false 0 would tell the iPhone the car stands while its GPS sees it moving.
+     * The ECARX sensor manager. The ECARX framework can come up after DiPlay at boot, so a failed
+     * lookup is retried, but at most every few seconds: the poll and the video gate both ask.
      */
-    private fun sensor(): Any? = sensor ?: runCatching {
+    private fun sensor(): Any? {
+        sensor?.let { return it }
         val app = context ?: return null
-        val car = Class.forName(CAR).getMethod("create", Context::class.java).invoke(null, app)
-        // Through the public interface: the implementing class may not be accessible to reflection.
-        val manager = Class.forName(ICAR).getMethod("getSensorManager").invoke(car)!!
-        val status = call(manager, "isSensorSupported", SENSOR_TYPE_CAR_SPEED)?.toString()
-        check(status != null && status != "notavailable" && status != "error") { "speed sensor $status" }
+        val now = SystemClock.elapsedRealtime()
+        if (lastAttemptAt != 0L && now - lastAttemptAt < RETRY_MILLIS) return null
+        lastAttemptAt = now
+        return runCatching {
+            val car = Class.forName(CAR).getMethod("create", Context::class.java).invoke(null, app)
+            // Through the public interface: the implementing class may not be accessible to reflection.
+            Class.forName(ICAR).getMethod("getSensorManager").invoke(car)!!
+        }.onSuccess { sensor = it }.onFailure {
+            if (!failureLogged) Log.w(TAG, "ECARX sensors unavailable, retrying", it)
+            failureLogged = true
+        }.getOrNull()
+    }
+
+    /**
+     * Whether the speed sensor is supported; asked once. An unsupported sensor may read 0, and a false
+     * 0 would tell the iPhone the car stands while its GPS sees it moving. The gear does not depend on it.
+     */
+    private fun speedSupported(manager: Any): Boolean {
+        speedSupported?.let { return it }
+        // A failed call is asked again at the next read; only an answer is kept.
+        val status = runCatching { call(manager, "isSensorSupported", SENSOR_TYPE_CAR_SPEED)?.toString() }
+            .getOrElse { return false }
+        val supported = status != null && status != "notavailable" && status != "error"
         Log.i(TAG, "ECARX speed sensor $status")
-        manager
-    }.onSuccess { sensor = it }.onFailure {
-        // The ECARX framework can come up after DiPlay at boot, so this retries; say it once.
-        if (!failureLogged) Log.w(TAG, "ECARX sensors unavailable, retrying", it)
-        failureLogged = true
-    }.getOrNull()
+        speedSupported = supported
+        return supported
+    }
 
     private fun call(sensor: Any, method: String, type: Int): Any? =
         Class.forName(SENSOR).getMethod(method, Int::class.javaPrimitiveType).invoke(sensor, type)
