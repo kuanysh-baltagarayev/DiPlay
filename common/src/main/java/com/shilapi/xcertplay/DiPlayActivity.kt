@@ -2,6 +2,9 @@
 // UI copy and visual language adapted from DiAuto. See docs/THIRD_PARTY_NOTICES.md.
 package com.shilapi.xcertplay
 
+import android.net.ConnectivityManager
+import java.net.URL
+import java.net.URLConnection
 import android.Manifest
 import android.app.AlertDialog
 import android.app.Dialog
@@ -97,6 +100,7 @@ import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.GeelyUpdates
+import com.shilapi.xcertplay.update.InternetNetworkSelector
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import java.io.File
 import java.io.IOException
@@ -2669,7 +2673,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun latestRelease(): UpdateRelease? {
-        return UpdateReleaseLookup.latest(version(), userAgent())
+        return UpdateReleaseLookup.latest(version(), userAgent(), internetConnection())
+    }
+
+    // While CarPlay runs, the default network is DiPlay's own VPN for the USB link, which has no internet.
+    private fun internetConnection(): (URL) -> URLConnection {
+        val network = runCatching {
+            getSystemService(ConnectivityManager::class.java)?.let(InternetNetworkSelector::select)
+        }.getOrNull() ?: return { it.openConnection() }
+        return network::openConnection
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
@@ -2702,10 +2714,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
                 release = latestRelease() ?: throw IOException(getString(R.string.update_up_to_date))
+                val connection = internetConnection()
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
-                UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
+                UpdateClient.download(release.checksumsUrl, checksumsFile, connection) { _, _ -> }
                 val apkFile = File(directory, release.apkName)
-                UpdateClient.download(release.apkUrl, apkFile) { written, total ->
+                UpdateClient.download(release.apkUrl, apkFile, connection) { written, total ->
                     val percent = total?.takeIf { it > 0 }?.let { (written * 100 / it).toInt() } ?: return@download
                     if (percent != updateProgress) {
                         updateProgress = percent
