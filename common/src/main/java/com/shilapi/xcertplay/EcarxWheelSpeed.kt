@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -70,10 +72,18 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     fun attach(appContext: Context) = apply { context = appContext.applicationContext }
 
-    /** Whether this head unit has a GPS receiver of its own; the KX11 has none. */
+    /**
+     * Whether this head unit has a working GPS receiver of its own. The KX11 declares the GPS feature
+     * and lists a "gps" provider, but keeps it disabled and has never had a fix from it, so only an
+     * enabled provider with a fix counts.
+     */
+    @SuppressLint("MissingPermission") // The location permission is checked; a refusal reads as no GPS.
     fun hasGps(context: Context): Boolean = runCatching {
+        val manager = context.getSystemService(LocationManager::class.java) ?: return false
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS) &&
-            context.getSystemService(LocationManager::class.java)?.allProviders?.contains(LocationManager.GPS_PROVIDER) == true
+            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER) &&
+            manager.getLastKnownLocation(LocationManager.GPS_PROVIDER) != null
     }.getOrDefault(false)
 
     @Synchronized
