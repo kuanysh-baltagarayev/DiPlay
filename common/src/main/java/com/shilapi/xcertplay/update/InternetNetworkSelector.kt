@@ -12,8 +12,11 @@ internal object InternetNetworkSelector {
             if (active != null) add(active)
             connectivity.allNetworks.forEach { if (it != active) add(it) }
         }
+        // Never a VPN: DiPlay's own carries only the iPhone's USB link and has no DNS.
         return candidates.firstOrNull { network ->
-            connectivity.getNetworkCapabilities(network)?.let(::isValidatedInternet) == true
+            connectivity.getNetworkCapabilities(network)?.let {
+                isValidatedInternet(it) && it.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            } == true
         }
     }
 
