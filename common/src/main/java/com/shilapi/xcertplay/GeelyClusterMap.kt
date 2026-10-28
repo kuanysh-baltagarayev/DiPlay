@@ -48,6 +48,12 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * DiPlay does not keep a map the cluster no longer shows. While the window is not shown the iPhone
  * is asked not to draw the cluster map (stopUI). [ACTION_LAYOUT] moves or resizes the window (extras x, y, w, h);
  * the stream follows at the next connection.
+ *
+ * HUD mode (on by default, [ACTION_HUD_MODE]) uses the same stream for a small map in the free band of the
+ * windshield HUD instead: below the cluster's top 1920x720 on display 2, between MConfig+'s street and
+ * track lines. The iPhone is asked for a map-only stream of that window's size, the window opens by itself
+ * while a route is guided and closes when it ends, the cluster's map mode is never touched (mSpeed may hold
+ * it) and nothing is announced to MConfig+ or mSpeed. The cluster map by SRC does not work in this mode.
  */
 internal object GeelyClusterMap {
     private const val TAG = "DiPlay-GeelyClusterMap"
@@ -57,6 +63,8 @@ internal object GeelyClusterMap {
     const val ACTION_END = "hud.AAMAP_END"
     const val ACTION_TOGGLE = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE"
     const val ACTION_LAYOUT = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_LAYOUT"
+    /** `--ez on` (default true) turns the HUD map on or off; `--ei x y w h` moves it (display 2 pixels). */
+    const val ACTION_HUD_MODE = "com.shilapi.xcertplay.GEELY_HUD_MAP_MODE"
     /** The part of display 2 that reaches the cluster. */
     const val CANVAS_WIDTH = 1920
     const val CANVAS_HEIGHT = 720
@@ -65,6 +73,14 @@ internal object GeelyClusterMap {
     private const val KEY_Y = "y"
     private const val KEY_W = "w"
     private const val KEY_H = "h"
+    private const val KEY_HUD_MODE = "hud_mode"
+    private const val KEY_HUD_X = "hud_x"
+    private const val KEY_HUD_Y = "hud_y"
+    private const val KEY_HUD_W = "hud_w"
+    private const val KEY_HUD_H = "hud_h"
+    /** The free band of MConfig+'s HUD between its street and track lines (tested on the windshield 2026-10-28). */
+    private val HUD_DEFAULT = HudTestRect(0, 762, 192, 96)
+    private const val HUD_TICK_MILLIS = 1_000L
     /** Set while DiPlay holds the cluster in map mode, so a killed process is undone at the next start. */
     private const val KEY_HELD = "dim_held"
     /** ECARX names every extra display "HDMI", so the canvas that reaches the cluster is found by id. */
@@ -126,6 +142,18 @@ internal object GeelyClusterMap {
             .putInt(KEY_Y, layout.y).putInt(KEY_W, layout.width).putInt(KEY_H, layout.height).apply()
     }
 
+    /** Whether the stream and window are the HUD's small map rather than the cluster's. */
+    fun hudMode(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
+
+    /** The HUD map window and the size of its stream, in display 2 pixels. */
+    fun hudRect(context: Context): HudTestRect {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val d = HUD_DEFAULT
+        return hudTestRect(prefs.getInt(KEY_HUD_X, d.x), prefs.getInt(KEY_HUD_Y, d.y),
+            prefs.getInt(KEY_HUD_W, d.width), prefs.getInt(KEY_HUD_H, d.height))
+    }
+
     private fun setHeld(context: Context, held: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HELD, held).apply()
     }
@@ -162,6 +190,7 @@ internal object GeelyClusterMap {
                     ACTION_HIDE -> hideRequested()
                     ACTION_TOGGLE -> toggle()
                     ACTION_LAYOUT -> relayout(intent)
+                    ACTION_HUD_MODE -> setHudMode(intent)
                 }
             }
         }
@@ -170,6 +199,7 @@ internal object GeelyClusterMap {
             addAction(ACTION_HIDE)
             addAction(ACTION_TOGGLE)
             addAction(ACTION_LAYOUT)
+            addAction(ACTION_HUD_MODE)
         }
         ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
         runCatching {
@@ -181,12 +211,51 @@ internal object GeelyClusterMap {
                     }
                 })
         }.onFailure { Log.w(TAG, "cannot watch the cluster's navigation mode", it) }
-        Log.i(TAG, "waiting for the cluster map to be asked for; window ${layout(app)}")
+        main.postDelayed(hudTick, HUD_TICK_MILLIS)
+        Log.i(TAG, if (hudMode(app)) "HUD map mode: window ${hudRect(app)}, opens while a route is guided"
+            else "waiting for the cluster map to be asked for; window ${layout(app)}")
+    }
+
+    /** In HUD mode the map window follows the route: open while the iPhone guides one, closed otherwise. */
+    private val hudTick = object : Runnable {
+        override fun run() {
+            val app = context ?: return
+            if (hudMode(app)) {
+                val routeActive = connected && CarPlayGlance.hudSnapshot().maneuverType != null
+                if (routeActive && !wanted) {
+                    wanted = true
+                    if (!show()) wanted = false
+                } else if (!routeActive && wanted) {
+                    wanted = false
+                    control(false)
+                    close()
+                }
+            }
+            main.postDelayed(this, HUD_TICK_MILLIS)
+        }
+    }
+
+    private fun setHudMode(intent: Intent) {
+        val app = context ?: return
+        val old = hudRect(app)
+        val next = hudTestRect(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
+            intent.getIntExtra("w", old.width), intent.getIntExtra("h", old.height))
+        val on = intent.getBooleanExtra("on", true)
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HUD_MODE, on)
+            .putInt(KEY_HUD_X, next.x).putInt(KEY_HUD_Y, next.y).putInt(KEY_HUD_W, next.width)
+            .putInt(KEY_HUD_H, next.height).apply()
+        if (wanted) {
+            wanted = false
+            control(false)
+            close()
+        }
+        Log.i(TAG, "HUD map mode ${if (on) "on" else "off"}, window $old -> $next; the stream size follows at the next connection")
     }
 
     /** Closes the window when the cluster left map mode without DiPlay asking for it. */
     private val checkNaviMode = Runnable {
         val app = context ?: return@Runnable
+        if (hudMode(app)) return@Runnable
         if (root == null || SystemClock.elapsedRealtime() - ownSwitchAt < OWN_SWITCH_GRACE_MILLIS) return@Runnable
         val mode = naviMode(app) ?: return@Runnable
         if (mode == EcarxDim.NAVI_MODE_FULL) return@Runnable
@@ -203,6 +272,10 @@ internal object GeelyClusterMap {
     }
 
     private fun showRequested() {
+        if (context?.let { hudMode(it) } == true) {
+            Log.i(TAG, "cluster map asked for in HUD mode; ignored (GEELY_HUD_MAP_MODE --ez on false brings it back)")
+            return
+        }
         if (!connected) {
             Log.i(TAG, "cluster map asked for without a CarPlay session; ignored")
             return
@@ -214,7 +287,7 @@ internal object GeelyClusterMap {
     }
 
     private fun hideRequested() {
-        if (!wanted) return
+        if (!wanted || context?.let { hudMode(it) } == true) return
         wanted = false
         control(false)
         close()
@@ -230,7 +303,7 @@ internal object GeelyClusterMap {
         val frame = root
         val manager = window
         if (frame != null && manager != null) {
-            runCatching { manager.updateViewLayout(frame, windowParams(next)) }
+            runCatching { manager.updateViewLayout(frame, windowParams(next.x, next.y, next.width, next.height)) }
         }
         Log.i(TAG, "cluster map window $old -> $next; the stream size follows at the next connection")
     }
@@ -265,7 +338,7 @@ internal object GeelyClusterMap {
         val shown = wanted
         wanted = false
         close()
-        if (shown) send(ACTION_END)
+        if (shown && !hudMode(context ?: return)) send(ACTION_END)
     }
 
     /** Opens the window and answers MConfig+; false when it could not be opened. */
@@ -281,11 +354,20 @@ internal object GeelyClusterMap {
             val frame = FrameLayout(displayContext).apply { setBackgroundColor(Color.BLACK) }
             frame.addView(TextureView(displayContext).apply { surfaceTextureListener = MirrorSurface() },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            if (hudMode(app)) {
+                val rect = hudRect(app)
+                manager.addView(frame, windowParams(rect.x, rect.y, rect.width, rect.height, touchable = false))
+                window = manager
+                root = frame
+                ownsDim = false
+                Log.i(TAG, "HUD map window $rect shown on display $DISPLAY_ID")
+                return@runCatching
+            }
             val cardView = ClusterTurnCardView(displayContext).apply { visibility = View.GONE }
             frame.addView(cardView,
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val layout = layout(app)
-            manager.addView(frame, windowParams(layout))
+            manager.addView(frame, windowParams(layout.x, layout.y, layout.width, layout.height))
             window = manager
             root = frame
             turnCard = cardView
@@ -304,14 +386,15 @@ internal object GeelyClusterMap {
         }.onFailure { Log.w(TAG, "cluster map window failed", it) }.isSuccess
     }
 
-    private fun windowParams(layout: Layout) = WindowManager.LayoutParams(layout.width, layout.height,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-        PixelFormat.TRANSLUCENT).apply {
-        gravity = Gravity.TOP or Gravity.START
-        x = layout.x
-        y = layout.y
-    }
+    private fun windowParams(x: Int, y: Int, width: Int, height: Int, touchable: Boolean = true) =
+        WindowManager.LayoutParams(width, height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+                (if (touchable) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
+            PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            this.x = x
+            this.y = y
+        }
 
     private fun windowContext(app: Context, display: Display): Context {
         val displayContext = app.createDisplayContext(display)
