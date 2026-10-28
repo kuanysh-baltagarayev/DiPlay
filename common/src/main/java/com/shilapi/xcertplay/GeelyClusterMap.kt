@@ -93,6 +93,8 @@ internal object GeelyClusterMap {
     private const val KEY_HUD_SA = "hud_sa"
     /** The free band of MConfig+'s HUD between its street and track lines (tested on the windshield 2026-10-28). */
     private val HUD_DEFAULT = HudRect(0, 762, 192, 96)
+    /** Where the iPhone puts the car on the HUD map, percent from the left: about the middle of the small window (tested 2026-10-28). */
+    private const val HUD_MARKER_X = 30
     private const val HUD_TICK_MILLIS = 1_000L
     /** After a failed attempt to open the HUD window, to log once and not every second. */
     private const val HUD_RETRY_MILLIS = 30_000L
@@ -182,7 +184,7 @@ internal object GeelyClusterMap {
             ?.let { name -> CarPlayClusterDisplay.Content.entries.firstOrNull { it.name == name } }
             ?: CarPlayClusterDisplay.Content.MAP
         return HudStream(prefs.getInt(KEY_HUD_K, 4).coerceIn(1, 8), content,
-            prefs.getInt(KEY_HUD_MX, 50).coerceIn(5, 95), prefs.getInt(KEY_HUD_MY, 50).coerceIn(5, 95),
+            prefs.getInt(KEY_HUD_MX, HUD_MARKER_X).coerceIn(5, 95), prefs.getInt(KEY_HUD_MY, 50).coerceIn(5, 95),
             prefs.getInt(KEY_HUD_SA, 0).coerceIn(0, 40))
     }
 
