@@ -24,6 +24,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
+import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.hud.ClusterTurnGuidance
@@ -51,8 +52,8 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  *
  * HUD mode (on by default, [ACTION_HUD_MODE]) uses the same stream for a small map in the free band of the
  * windshield HUD instead: below the cluster's top 1920x720 on display 2, between MConfig+'s street and
- * track lines. The iPhone is asked for the same view as for the cluster, at that window's size (it also
- * draws its turn card there), the window opens by itself
+ * track lines. The iPhone is asked for a stream a few times that window's size (it takes a stream of the
+ * window's own size for a tiny screen with huge controls), shown scaled down, the window opens by itself
  * while a route is guided and closes when it ends, the cluster's map mode is never touched (mSpeed may hold
  * it) and nothing is announced to MConfig+ or mSpeed. The cluster map by SRC does not work in this mode.
  */
@@ -65,9 +66,11 @@ internal object GeelyClusterMap {
     const val ACTION_TOGGLE = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE"
     const val ACTION_LAYOUT = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_LAYOUT"
     /**
-     * `--ez on` (default true) turns the HUD map on or off; `--ei x y w h` moves it (display 2 pixels);
-     * `--ei mx my` is where the iPhone should put the car, in percent of the stream, and `--ei sa` the
-     * percent of each edge the iPhone keeps clear (the safe area); they apply at the next connection.
+     * `--ez on` (default true) turns the HUD map on or off; `--ei x y w h` moves it (display 2 pixels).
+     * The iPhone draws a stream `k` times the window (default 4: it takes a 192x96 display for a tiny
+     * screen with huge controls), shown scaled down in the window; `--es content map|instruments`,
+     * `--ei mx my` (where the iPhone puts the car, percent of the stream) and `--ei sa` (percent of each
+     * edge kept clear) tune its view. They apply at the next connection.
      */
     const val ACTION_HUD_MODE = "com.shilapi.xcertplay.GEELY_HUD_MAP_MODE"
     /** The part of display 2 that reaches the cluster. */
@@ -83,6 +86,8 @@ internal object GeelyClusterMap {
     private const val KEY_HUD_Y = "hud_y"
     private const val KEY_HUD_W = "hud_w"
     private const val KEY_HUD_H = "hud_h"
+    private const val KEY_HUD_K = "hud_k"
+    private const val KEY_HUD_CONTENT = "hud_content"
     private const val KEY_HUD_MX = "hud_mx"
     private const val KEY_HUD_MY = "hud_my"
     private const val KEY_HUD_SA = "hud_sa"
@@ -154,11 +159,6 @@ internal object GeelyClusterMap {
     fun hudMode(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
 
-    /** Width and height of the stream to ask the iPhone for: the HUD map window's, or the cluster map window's. */
-    fun streamSize(context: Context): Pair<Int, Int> =
-        if (hudMode(context)) hudRect(context).let { it.width to it.height }
-        else layout(context).let { it.width to it.height }
-
     /** The HUD map window and the size of its stream, in display 2 pixels. */
     fun hudRect(context: Context): HudTestRect {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -167,10 +167,17 @@ internal object GeelyClusterMap {
             prefs.getInt(KEY_HUD_W, d.width), prefs.getInt(KEY_HUD_H, d.height))
     }
 
-    /** Where the iPhone is asked to put the car on the HUD map (percent), and the safe-area edge (percent). */
-    fun hudMarker(context: Context): Triple<Int, Int, Int> {
+    /** How the iPhone is asked to draw the HUD map: stream size as a multiple of the window, view, car place. */
+    data class HudStream(val factor: Int, val content: CarPlayClusterDisplay.Content, val markerX: Int,
+        val markerY: Int, val edge: Int)
+
+    fun hudStream(context: Context): HudStream {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return Triple(prefs.getInt(KEY_HUD_MX, 50).coerceIn(5, 95), prefs.getInt(KEY_HUD_MY, 50).coerceIn(5, 95),
+        val content = prefs.getString(KEY_HUD_CONTENT, null)
+            ?.let { name -> CarPlayClusterDisplay.Content.entries.firstOrNull { it.name == name } }
+            ?: CarPlayClusterDisplay.Content.MAP
+        return HudStream(prefs.getInt(KEY_HUD_K, 4).coerceIn(1, 8), content,
+            prefs.getInt(KEY_HUD_MX, 50).coerceIn(5, 95), prefs.getInt(KEY_HUD_MY, 50).coerceIn(5, 95),
             prefs.getInt(KEY_HUD_SA, 0).coerceIn(0, 40))
     }
 
@@ -261,13 +268,19 @@ internal object GeelyClusterMap {
         val next = hudTestRect(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
             intent.getIntExtra("w", old.width), intent.getIntExtra("h", old.height))
         val on = intent.getBooleanExtra("on", true)
-        val marker = hudMarker(app)
+        val stream = hudStream(app)
+        val content = when (intent.getStringExtra("content")?.lowercase()) {
+            "map" -> CarPlayClusterDisplay.Content.MAP
+            "instruments" -> CarPlayClusterDisplay.Content.INSTRUMENTS
+            else -> stream.content
+        }
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HUD_MODE, on)
             .putInt(KEY_HUD_X, next.x).putInt(KEY_HUD_Y, next.y).putInt(KEY_HUD_W, next.width)
-            .putInt(KEY_HUD_H, next.height)
-            .putInt(KEY_HUD_MX, intent.getIntExtra("mx", marker.first))
-            .putInt(KEY_HUD_MY, intent.getIntExtra("my", marker.second))
-            .putInt(KEY_HUD_SA, intent.getIntExtra("sa", marker.third)).apply()
+            .putInt(KEY_HUD_H, next.height).putInt(KEY_HUD_K, intent.getIntExtra("k", stream.factor))
+            .putString(KEY_HUD_CONTENT, content.name)
+            .putInt(KEY_HUD_MX, intent.getIntExtra("mx", stream.markerX))
+            .putInt(KEY_HUD_MY, intent.getIntExtra("my", stream.markerY))
+            .putInt(KEY_HUD_SA, intent.getIntExtra("sa", stream.edge)).apply()
         if (wanted) {
             wanted = false
             control(false)

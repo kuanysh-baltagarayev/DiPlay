@@ -85,6 +85,7 @@ import com.shilapi.xcertplay.airplay.AirPlayPhysicalSizeMm
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.CarPlayUiScale
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
+import com.shilapi.xcertplay.airplay.AirPlayInsets
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.airplay.AirPlayIcon
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
@@ -1662,9 +1663,29 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         if (GeelyClusterMap.available(this)) {
             val requestedScale = AirPlayPersistence.loadClusterMapScalePercent(this)
-            // The stream has the size of the map window: between the cluster's own readings, or, in HUD mode,
-            // the small window in the free band of the windshield HUD, with the same view of the iPhone.
-            val (streamWidth, streamHeight) = GeelyClusterMap.streamSize(this)
+            if (GeelyClusterMap.hudMode(this)) {
+                // The small map in the free band of the windshield HUD. The iPhone draws a stream a few times the
+                // window's size, as it would for a normal screen, and the window shows it scaled down.
+                val rect = GeelyClusterMap.hudRect(this)
+                val view = GeelyClusterMap.hudStream(this)
+                return CarPlayClusterDisplay.config(
+                    rect.width * view.factor,
+                    rect.height * view.factor,
+                    100,
+                    content = view.content,
+                    markerXPercent = view.markerX,
+                    markerYPercent = view.markerY,
+                    baseSafeArea = AirPlayInsets(view.edge, view.edge, view.edge, view.edge),
+                ).also {
+                    MapMirrors.streamAspect = it.widthPixels.toDouble() / it.heightPixels
+                    appendLog("HUD map (Geely): requesting ${it.widthPixels}x${it.heightPixels} for a ${rect.width}x${rect.height} window, " +
+                        "content=${view.content} marker=${view.markerX},${view.markerY} edge=${view.edge}% safeArea=${it.safeArea}")
+                }
+            }
+            // The stream has the size of the map window between the cluster's own readings.
+            val window = GeelyClusterMap.layout(this)
+            val streamWidth = window.width
+            val streamHeight = window.height
             fun streamAt(scale: Int) = CarPlayClusterDisplay.config(
                 streamWidth,
                 streamHeight,
