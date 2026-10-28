@@ -53,9 +53,10 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * HUD mode (on by default, [ACTION_HUD_MODE]) uses the same stream for a small map in the free band of the
  * windshield HUD instead: below the cluster's top 1920x720 on display 2, between MConfig+'s street and
  * track lines. The iPhone is asked for a stream a few times that window's size (it takes a stream of the
- * window's own size for a tiny screen with huge controls), shown scaled down, the window opens by itself
- * while a route is guided and closes when it ends, the cluster's map mode is never touched (mSpeed may hold
- * it) and nothing is announced to MConfig+ or mSpeed. The cluster map by SRC does not work in this mode.
+ * window's own size for a tiny screen with huge controls), shown scaled down. SRC (MConfig+ action 38)
+ * opens and closes the window, which also closes with the session; with `auto` it follows the route by
+ * itself instead. The cluster's map mode is never touched (mSpeed may hold it) and nothing is announced
+ * to MConfig+ or mSpeed. The cluster map itself is not available in this mode.
  */
 internal object GeelyClusterMap {
     private const val TAG = "DiPlay-GeelyClusterMap"
@@ -66,7 +67,8 @@ internal object GeelyClusterMap {
     const val ACTION_TOGGLE = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE"
     const val ACTION_LAYOUT = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_LAYOUT"
     /**
-     * `--ez on` (default true) turns the HUD map on or off; `--ei x y w h` moves it (display 2 pixels).
+     * `--ez on` (default true) turns the HUD map on or off; `--ez auto` (default false) opens the window by
+     * itself while a route is guided instead of by SRC; `--ei x y w h` moves it (display 2 pixels).
      * The iPhone draws a stream `k` times the window (default 4: it takes a 192x96 display for a tiny
      * screen with huge controls), shown scaled down in the window; `--es content map|instruments`,
      * `--ei mx my` (where the iPhone puts the car, percent of the stream) and `--ei sa` (percent of each
@@ -82,6 +84,7 @@ internal object GeelyClusterMap {
     private const val KEY_W = "w"
     private const val KEY_H = "h"
     private const val KEY_HUD_MODE = "hud_mode"
+    private const val KEY_HUD_AUTO = "hud_auto"
     private const val KEY_HUD_X = "hud_x"
     private const val KEY_HUD_Y = "hud_y"
     private const val KEY_HUD_W = "hud_w"
@@ -120,6 +123,8 @@ internal object GeelyClusterMap {
     @Volatile private var wanted = false
     /** The mode of the current session, fixed when it connects: the stream was asked for in that mode. */
     @Volatile private var activeHud = false
+    /** HUD mode only: the window follows the route by itself instead of waiting for SRC. */
+    @Volatile private var hudAuto = false
     private var hudRetryAt = 0L // main thread, elapsedRealtime before which the HUD window is not opened again
     private var context: Context? = null // main thread
     private var connected = false // main thread
@@ -165,6 +170,9 @@ internal object GeelyClusterMap {
     /** Whether the stream and window are the HUD's small map rather than the cluster's. */
     fun hudMode(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
+
+    private fun hudAuto(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_AUTO, false)
 
     /** The HUD map window and the size of its stream, in display 2 pixels. */
     fun hudRect(context: Context): HudRect {
@@ -246,16 +254,22 @@ internal object GeelyClusterMap {
                 })
         }.onFailure { Log.w(TAG, "cannot watch the cluster's navigation mode", it) }
         activeHud = hudMode(app)
+        hudAuto = hudAuto(app)
         main.postDelayed(hudTick, HUD_TICK_MILLIS)
-        Log.i(TAG, if (activeHud) "HUD map mode: window ${hudRect(app)}, opens while a route is guided"
+        Log.i(TAG, if (activeHud) "HUD map mode: window ${hudRect(app)}, opens by SRC" +
+            if (hudAuto) " and by itself while a route is guided" else ""
             else "waiting for the cluster map to be asked for; window ${layout(app)}")
     }
 
-    /** In HUD mode the map window follows the route: open while the iPhone guides one, closed otherwise. */
+    /**
+     * HUD mode with `auto`: the map window follows the route, open while the iPhone guides one and closed
+     * otherwise. Without it SRC (MConfig+ action 38, which sends [ACTION_SHOW] and [ACTION_HIDE]) opens
+     * and closes the window, as for the cluster map.
+     */
     private val hudTick = object : Runnable {
         override fun run() {
             val app = context ?: return
-            if (activeHud) {
+            if (activeHud && hudAuto) {
                 val routeActive = connected && CarPlayGlance.hudSnapshot().maneuverType != null
                 val now = SystemClock.elapsedRealtime()
                 if (routeActive && !wanted && now >= hudRetryAt) {
@@ -292,7 +306,9 @@ internal object GeelyClusterMap {
             .putString(KEY_HUD_CONTENT, content.name)
             .putInt(KEY_HUD_MX, intent.getIntExtra("mx", stream.markerX))
             .putInt(KEY_HUD_MY, intent.getIntExtra("my", stream.markerY))
-            .putInt(KEY_HUD_SA, intent.getIntExtra("sa", stream.edge)).apply()
+            .putInt(KEY_HUD_SA, intent.getIntExtra("sa", stream.edge))
+            .putBoolean(KEY_HUD_AUTO, if (intent.hasExtra("auto")) intent.getBooleanExtra("auto", false) else hudAuto(app)).apply()
+        hudAuto = hudAuto(app)
         Log.i(TAG, "HUD map mode ${if (on) "on" else "off"}, window $old -> $next; it applies at the next connection")
     }
 
@@ -316,26 +332,27 @@ internal object GeelyClusterMap {
     }
 
     private fun showRequested() {
-        if (activeHud) {
-            Log.i(TAG, "cluster map asked for in HUD mode; ignored (GEELY_HUD_MAP_MODE --ez on false brings it back)")
-            return
-        }
         if (!connected) {
             Log.i(TAG, "cluster map asked for without a CarPlay session; ignored")
             return
         }
         wanted = true
+        if (activeHud) {
+            // The HUD map is not announced: mSpeed would clear the cluster's area under a map that is not there.
+            if (root == null && !show()) wanted = false
+            return
+        }
         // Without the window (no overlay permission, no display 2) the iPhone must not keep
         // drawing the map, and MConfig+ gets no answer.
         if (root != null) send(ACTION_SHOWN) else if (!show()) wanted = false
     }
 
     private fun hideRequested() {
-        if (!wanted || activeHud) return
+        if (!wanted) return
         wanted = false
         control(false)
         close()
-        send(ACTION_END)
+        if (!activeHud) send(ACTION_END)
     }
 
     private fun relayout(intent: Intent) {
