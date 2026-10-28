@@ -1677,10 +1677,8 @@ open class CarPlayHostActivity : ComponentActivity() {
                     markerYPercent = view.markerY,
                     baseSafeArea = AirPlayInsets(view.edge, view.edge, view.edge, view.edge),
                 )
-                val factor = hudStreamFactor(view.factor, rect.width, rect.height)
-                val requested = streamAt(factor)
-                val effective = if (factor > 1 && !largerCanvasSupport(requested).supported) streamAt(1) else requested
-                return effective.also {
+                // At most display 2's size, smaller than the 1760x720 main stream this decoder already takes.
+                return streamAt(hudStreamFactor(view.factor, rect.width, rect.height)).also {
                     MapMirrors.streamAspect = it.widthPixels.toDouble() / it.heightPixels
                     appendLog("HUD map (Geely): requesting ${it.widthPixels}x${it.heightPixels} for a ${rect.width}x${rect.height} window, " +
                         "content=${view.content} marker=${view.markerX},${view.markerY} edge=${view.edge}% safeArea=${it.safeArea}")
