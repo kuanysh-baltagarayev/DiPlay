@@ -80,7 +80,7 @@ internal object GeelyUpdates {
     /** The private repository's own API asset URL; upstream's github.com-only check does not cover it. */
     fun isOwnAssetUrl(url: String): Boolean {
         val own = repo?.takeIf { active } ?: return false
-        return url.startsWith("https://api.github.com/repos/$own/releases/assets/")
+        return url.startsWith("https://api.github.com/repos/$own/releases/assets/", ignoreCase = true)
     }
 
     /** Null when the upstream comparison applies. */

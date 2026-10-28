@@ -27,6 +27,18 @@ class GeelyUpdatesTest {
         assertFalse(GeelyUpdates.active)
     }
 
+    @Test fun onlyTheOwnRepositorysAssetUrlsPassUpstreamsHostCheck() {
+        GeelyUpdates.configure("owner/builds", "token")
+        assertTrue(GeelyUpdates.isOwnAssetUrl("https://api.github.com/repos/owner/builds/releases/assets/7"))
+        // GitHub may spell the repository in its own case.
+        assertTrue(GeelyUpdates.isOwnAssetUrl("https://api.github.com/repos/Owner/Builds/releases/assets/7"))
+        assertFalse(GeelyUpdates.isOwnAssetUrl("https://api.github.com/repos/other/builds/releases/assets/7"))
+        assertFalse(GeelyUpdates.isOwnAssetUrl("https://api.github.com/repos/owner/builds/releases"))
+        assertFalse(GeelyUpdates.isOwnAssetUrl("https://evil.example/repos/owner/builds/releases/assets/7"))
+        GeelyUpdates.configure(null, null)
+        assertFalse(GeelyUpdates.isOwnAssetUrl("https://api.github.com/repos/owner/builds/releases/assets/7"))
+    }
+
     @Test fun theBuildNumberOrdersBuildsOfOneVersion() {
         GeelyUpdates.configure("owner/builds", "token")
         assertTrue(GeelyUpdates.isNewer("v0.2.21-geely.2", "0.2.21-geely.1")!!)

@@ -4864,7 +4864,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 onVehicleDataSettingChanged(it)
             }
         }
-        if (capabilities == null || capabilities.gearSupported) {
+        // ECARX has its own switch under Advanced: it reads the gear without ADB.
+        if (!EcarxWheelSpeed.present() && (capabilities == null || capabilities.gearSupported)) {
             toggle(card, getString(R.string.video_while_parked),
                 getString(R.string.video_while_parked_description),
                 BydOutputSettings.videoWhileParked(this), enabled = !adbSwitchChangePending) {
