@@ -85,7 +85,6 @@ import com.shilapi.xcertplay.airplay.AirPlayPhysicalSizeMm
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.CarPlayUiScale
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
-import com.shilapi.xcertplay.airplay.AirPlayInsets
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.airplay.AirPlayIcon
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
@@ -1661,30 +1660,14 @@ open class CarPlayHostActivity : ComponentActivity() {
                 }
             }
         }
-        if (GeelyClusterMap.available(this) && GeelyClusterMap.hudMode(this)) {
-            // The small map in the free band of the windshield HUD: a map-only stream of the window's own size,
-            // the car in the middle, no safe area.
-            val rect = GeelyClusterMap.hudRect(this)
-            return CarPlayClusterDisplay.config(
-                rect.width,
-                rect.height,
-                100,
-                content = CarPlayClusterDisplay.Content.MAP,
-                markerXPercent = 50,
-                markerYPercent = 50,
-                baseSafeArea = AirPlayInsets(0, 0, 0, 0),
-            ).also {
-                MapMirrors.streamAspect = it.widthPixels.toDouble() / it.heightPixels
-                appendLog("HUD map (Geely): requesting ${it.widthPixels}x${it.heightPixels} url=${it.initialUrl}")
-            }
-        }
         if (GeelyClusterMap.available(this)) {
             val requestedScale = AirPlayPersistence.loadClusterMapScalePercent(this)
-            // The stream has the size of the map window between the cluster's own readings.
-            val window = GeelyClusterMap.layout(this)
+            // The stream has the size of the map window: between the cluster's own readings, or, in HUD mode,
+            // the small window in the free band of the windshield HUD, with the same view of the iPhone.
+            val (streamWidth, streamHeight) = GeelyClusterMap.streamSize(this)
             fun streamAt(scale: Int) = CarPlayClusterDisplay.config(
-                window.width,
-                window.height,
+                streamWidth,
+                streamHeight,
                 scale,
                 content = AirPlayPersistence.loadClusterContent(this),
                 markerXPercent = AirPlayPersistence.loadClusterMarkerXPercent(this),
