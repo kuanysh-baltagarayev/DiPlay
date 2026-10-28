@@ -83,6 +83,7 @@ internal object GeelyClusterMap {
     private val main = Handler(Looper.getMainLooper())
     private val worker by lazy { Handler(HandlerThread("diplay-geely-cluster").apply { start() }.looper) }
     @Volatile private var available: Boolean? = null
+    @Volatile private var checkedAt = 0L
     @Volatile private var wanted = false
     private var context: Context? = null // main thread
     private var connected = false // main thread
@@ -101,11 +102,13 @@ internal object GeelyClusterMap {
     data class Layout(val x: Int, val y: Int, val width: Int, val height: Int) {
         companion object {
             val DEFAULT = Layout(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-            private const val MIN = 64
+            // The broadcast is open to every app: a window too small to read must not be saved.
+            internal const val MIN_WIDTH = 320
+            internal const val MIN_HEIGHT = 120
 
             fun sanitize(x: Int, y: Int, width: Int, height: Int): Layout {
-                val w = (width.coerceIn(MIN, CANVAS_WIDTH) / 8) * 8
-                val h = (height.coerceIn(MIN, CANVAS_HEIGHT) / 8) * 8
+                val w = (width.coerceIn(MIN_WIDTH, CANVAS_WIDTH) / 8) * 8
+                val h = (height.coerceIn(MIN_HEIGHT, CANVAS_HEIGHT) / 8) * 8
                 return Layout(x.coerceIn(0, CANVAS_WIDTH - w), y.coerceIn(0, CANVAS_HEIGHT - h), w, h)
             }
         }
@@ -131,10 +134,16 @@ internal object GeelyClusterMap {
         val size: Int, val opacity: Int, val night: Boolean)
 
     /** Whether this head unit gets the cluster map this way: an ECARX canvas, the DIM SDK and MConfig+. */
-    fun available(context: Context): Boolean = available ?: synchronized(this) {
-        available ?: detect(context.applicationContext ?: context).also {
-            available = it
-            Log.i(TAG, "Geely cluster map ${if (it) "available" else "not available"}")
+    fun available(context: Context): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        cachedAvailability(available, checkedAt, now)?.let { return it }
+        return synchronized(this) {
+            cachedAvailability(available, checkedAt, now)
+                ?: detect(context.applicationContext ?: context).also {
+                    if (it != available) Log.i(TAG, "Geely cluster map ${if (it) "available" else "not available"}")
+                    available = it
+                    checkedAt = now
+                }
         }
     }
 
@@ -386,4 +395,16 @@ internal object GeelyClusterMap {
 
         override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
     }
+}
+
+private const val RECHECK_MILLIS = 10_000L
+
+/**
+ * A yes holds for the process. A no is asked again after a while: at boot display 2 or the ECARX
+ * classes may not be up yet, and MConfig+ may be installed later.
+ */
+internal fun cachedAvailability(known: Boolean?, checkedAt: Long, now: Long): Boolean? = when {
+    known == true -> true
+    known == false && now - checkedAt < RECHECK_MILLIS -> false
+    else -> null
 }
