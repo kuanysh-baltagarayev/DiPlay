@@ -59,14 +59,14 @@ internal object GeelyHudTest {
             hide()
             return
         }
-        val rect = hudTestRect(intent.getIntExtra("x", 0), intent.getIntExtra("y", 762),
+        val rect = clampHudRect(intent.getIntExtra("x", 0), intent.getIntExtra("y", 762),
             intent.getIntExtra("w", 728), intent.getIntExtra("h", 96))
         show(rect)
         main.removeCallbacks(autoHide)
         main.postDelayed(autoHide, hudTestHideMillis(intent.getIntExtra("sec", 120)))
     }
 
-    private fun show(rect: HudTestRect) {
+    private fun show(rect: HudRect) {
         val app = context ?: return
         runCatching {
             val existing = view
@@ -98,7 +98,7 @@ internal object GeelyHudTest {
         Log.i(TAG, "HUD test window removed")
     }
 
-    private fun params(rect: HudTestRect) = WindowManager.LayoutParams(rect.width, rect.height,
+    private fun params(rect: HudRect) = WindowManager.LayoutParams(rect.width, rect.height,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -116,7 +116,7 @@ internal object GeelyHudTest {
     }
 
     /** A bright fill, a white frame and a ruler in display pixels: a tick every 10, a number every 100. */
-    private class HudTestView(context: Context, var rect: HudTestRect) : View(context) {
+    private class HudTestView(context: Context, var rect: HudRect) : View(context) {
         private val fill = Paint().apply { color = Color.argb(150, 0, 200, 255) }
         private val line = Paint().apply { color = Color.WHITE; strokeWidth = 2f; style = Paint.Style.STROKE }
         private val tick = Paint().apply { color = Color.WHITE; strokeWidth = 1f }
@@ -143,19 +143,6 @@ internal object GeelyHudTest {
             canvas.drawText("${rect.width}x${rect.height} @ ${rect.x},${rect.y}", 8f, h - 8f, text)
         }
     }
-}
-
-internal data class HudTestRect(val x: Int, val y: Int, val width: Int, val height: Int)
-
-private const val DISPLAY_WIDTH = 1920
-private const val DISPLAY_HEIGHT = 1080
-private const val MIN_SIZE = 16
-
-/** The rectangle kept on display 2 and at least [MIN_SIZE] pixels each way. */
-internal fun hudTestRect(x: Int, y: Int, width: Int, height: Int): HudTestRect {
-    val w = width.coerceIn(MIN_SIZE, DISPLAY_WIDTH)
-    val h = height.coerceIn(MIN_SIZE, DISPLAY_HEIGHT)
-    return HudTestRect(x.coerceIn(0, DISPLAY_WIDTH - w), y.coerceIn(0, DISPLAY_HEIGHT - h), w, h)
 }
 
 /** Seconds until the window removes itself: 5 s to 10 min, so it never stays on the windshield. */

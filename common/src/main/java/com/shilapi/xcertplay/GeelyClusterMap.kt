@@ -92,8 +92,10 @@ internal object GeelyClusterMap {
     private const val KEY_HUD_MY = "hud_my"
     private const val KEY_HUD_SA = "hud_sa"
     /** The free band of MConfig+'s HUD between its street and track lines (tested on the windshield 2026-10-28). */
-    private val HUD_DEFAULT = HudTestRect(0, 762, 192, 96)
+    private val HUD_DEFAULT = HudRect(0, 762, 192, 96)
     private const val HUD_TICK_MILLIS = 1_000L
+    /** After a failed attempt to open the HUD window, to log once and not every second. */
+    private const val HUD_RETRY_MILLIS = 30_000L
     /** Set while DiPlay holds the cluster in map mode, so a killed process is undone at the next start. */
     private const val KEY_HELD = "dim_held"
     /** ECARX names every extra display "HDMI", so the canvas that reaches the cluster is found by id. */
@@ -114,6 +116,9 @@ internal object GeelyClusterMap {
     @Volatile private var available: Boolean? = null
     @Volatile private var checkedAt = 0L
     @Volatile private var wanted = false
+    /** The mode of the current session, fixed when it connects: the stream was asked for in that mode. */
+    @Volatile private var activeHud = false
+    private var hudRetryAt = 0L // main thread, elapsedRealtime before which the HUD window is not opened again
     private var context: Context? = null // main thread
     private var connected = false // main thread
     private var window: WindowManager? = null // main thread
@@ -160,10 +165,10 @@ internal object GeelyClusterMap {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
 
     /** The HUD map window and the size of its stream, in display 2 pixels. */
-    fun hudRect(context: Context): HudTestRect {
+    fun hudRect(context: Context): HudRect {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val d = HUD_DEFAULT
-        return hudTestRect(prefs.getInt(KEY_HUD_X, d.x), prefs.getInt(KEY_HUD_Y, d.y),
+        return clampHudRect(prefs.getInt(KEY_HUD_X, d.x), prefs.getInt(KEY_HUD_Y, d.y),
             prefs.getInt(KEY_HUD_W, d.width), prefs.getInt(KEY_HUD_H, d.height))
     }
 
@@ -238,8 +243,9 @@ internal object GeelyClusterMap {
                     }
                 })
         }.onFailure { Log.w(TAG, "cannot watch the cluster's navigation mode", it) }
+        activeHud = hudMode(app)
         main.postDelayed(hudTick, HUD_TICK_MILLIS)
-        Log.i(TAG, if (hudMode(app)) "HUD map mode: window ${hudRect(app)}, opens while a route is guided"
+        Log.i(TAG, if (activeHud) "HUD map mode: window ${hudRect(app)}, opens while a route is guided"
             else "waiting for the cluster map to be asked for; window ${layout(app)}")
     }
 
@@ -247,11 +253,15 @@ internal object GeelyClusterMap {
     private val hudTick = object : Runnable {
         override fun run() {
             val app = context ?: return
-            if (hudMode(app)) {
+            if (activeHud) {
                 val routeActive = connected && CarPlayGlance.hudSnapshot().maneuverType != null
-                if (routeActive && !wanted) {
+                val now = SystemClock.elapsedRealtime()
+                if (routeActive && !wanted && now >= hudRetryAt) {
                     wanted = true
-                    if (!show()) wanted = false
+                    if (!show()) {
+                        wanted = false
+                        hudRetryAt = now + HUD_RETRY_MILLIS
+                    }
                 } else if (!routeActive && wanted) {
                     wanted = false
                     control(false)
@@ -265,9 +275,9 @@ internal object GeelyClusterMap {
     private fun setHudMode(intent: Intent) {
         val app = context ?: return
         val old = hudRect(app)
-        val next = hudTestRect(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
+        val next = clampHudRect(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
             intent.getIntExtra("w", old.width), intent.getIntExtra("h", old.height))
-        val on = intent.getBooleanExtra("on", true)
+        val on = if (intent.hasExtra("on")) intent.getBooleanExtra("on", true) else hudMode(app)
         val stream = hudStream(app)
         val content = when (intent.getStringExtra("content")?.lowercase()) {
             "map" -> CarPlayClusterDisplay.Content.MAP
@@ -281,18 +291,13 @@ internal object GeelyClusterMap {
             .putInt(KEY_HUD_MX, intent.getIntExtra("mx", stream.markerX))
             .putInt(KEY_HUD_MY, intent.getIntExtra("my", stream.markerY))
             .putInt(KEY_HUD_SA, intent.getIntExtra("sa", stream.edge)).apply()
-        if (wanted) {
-            wanted = false
-            control(false)
-            close()
-        }
-        Log.i(TAG, "HUD map mode ${if (on) "on" else "off"}, window $old -> $next; the stream size follows at the next connection")
+        Log.i(TAG, "HUD map mode ${if (on) "on" else "off"}, window $old -> $next; it applies at the next connection")
     }
 
     /** Closes the window when the cluster left map mode without DiPlay asking for it. */
     private val checkNaviMode = Runnable {
         val app = context ?: return@Runnable
-        if (hudMode(app)) return@Runnable
+        if (activeHud) return@Runnable
         if (root == null || SystemClock.elapsedRealtime() - ownSwitchAt < OWN_SWITCH_GRACE_MILLIS) return@Runnable
         val mode = naviMode(app) ?: return@Runnable
         if (mode == EcarxDim.NAVI_MODE_FULL) return@Runnable
@@ -309,7 +314,7 @@ internal object GeelyClusterMap {
     }
 
     private fun showRequested() {
-        if (context?.let { hudMode(it) } == true) {
+        if (activeHud) {
             Log.i(TAG, "cluster map asked for in HUD mode; ignored (GEELY_HUD_MAP_MODE --ez on false brings it back)")
             return
         }
@@ -324,7 +329,7 @@ internal object GeelyClusterMap {
     }
 
     private fun hideRequested() {
-        if (!wanted || context?.let { hudMode(it) } == true) return
+        if (!wanted || activeHud) return
         wanted = false
         control(false)
         close()
@@ -333,6 +338,10 @@ internal object GeelyClusterMap {
 
     private fun relayout(intent: Intent) {
         val app = context ?: return
+        if (activeHud) {
+            Log.i(TAG, "cluster map layout asked for in HUD mode; ignored (GEELY_HUD_MAP_MODE moves the HUD map)")
+            return
+        }
         val old = layout(app)
         val next = Layout.sanitize(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
             intent.getIntExtra("w", old.width), intent.getIntExtra("h", old.height))
@@ -371,11 +380,14 @@ internal object GeelyClusterMap {
 
     private fun onConnected(next: Boolean) {
         connected = next
-        if (next) return
+        if (next) {
+            activeHud = context?.let { hudMode(it) } ?: false
+            return
+        }
         val shown = wanted
         wanted = false
         close()
-        if (shown && !hudMode(context ?: return)) send(ACTION_END)
+        if (shown && !activeHud) send(ACTION_END)
     }
 
     /** Opens the window and answers MConfig+; false when it could not be opened. */
@@ -391,7 +403,7 @@ internal object GeelyClusterMap {
             val frame = FrameLayout(displayContext).apply { setBackgroundColor(Color.BLACK) }
             frame.addView(TextureView(displayContext).apply { surfaceTextureListener = MirrorSurface() },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            if (hudMode(app)) {
+            if (activeHud) {
                 val rect = hudRect(app)
                 manager.addView(frame, windowParams(rect.x, rect.y, rect.width, rect.height, touchable = false))
                 window = manager
@@ -528,3 +540,24 @@ internal fun cachedAvailability(known: Boolean?, checkedAt: Long, now: Long): Bo
     known == false && now - checkedAt < RECHECK_MILLIS -> false
     else -> null
 }
+
+/** A rectangle of display 2, in its pixels (1920x1080). */
+internal data class HudRect(val x: Int, val y: Int, val width: Int, val height: Int)
+
+private const val DISPLAY_WIDTH = 1920
+private const val DISPLAY_HEIGHT = 1080
+private const val MIN_SIZE = 16
+
+/** The rectangle kept on display 2 and at least [MIN_SIZE] pixels each way. */
+internal fun clampHudRect(x: Int, y: Int, width: Int, height: Int): HudRect {
+    val w = width.coerceIn(MIN_SIZE, DISPLAY_WIDTH)
+    val h = height.coerceIn(MIN_SIZE, DISPLAY_HEIGHT)
+    return HudRect(x.coerceIn(0, DISPLAY_WIDTH - w), y.coerceIn(0, DISPLAY_HEIGHT - h), w, h)
+}
+
+/**
+ * The stream is [requested] times the HUD window, but never larger than display 2: a stream the hardware
+ * decoder cannot take would fail the whole session.
+ */
+internal fun hudStreamFactor(requested: Int, width: Int, height: Int): Int =
+    minOf(requested, DISPLAY_WIDTH / width.coerceAtLeast(1), DISPLAY_HEIGHT / height.coerceAtLeast(1)).coerceAtLeast(1)
