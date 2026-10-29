@@ -37,11 +37,11 @@ class GeelyHudInfoTest {
     }
 
     @Test fun theTemperatureIsMarkedWhenTheRoadMayBeIcy() {
-        assertEquals(listOf(HudInfoLine("18°", HudInfoSeverity.NORMAL)), lines(HudInfo(18f, 400)))
-        assertEquals(listOf(HudInfoLine("3° ЛЁД", HudInfoSeverity.WARNING)), lines(HudInfo(3.4f, 400), icy = true))
-        assertEquals(listOf(HudInfoLine("4° ЛЁД", HudInfoSeverity.WARNING)), lines(HudInfo(3.6f, 400), icy = true))
-        assertEquals(listOf(HudInfoLine("0° ЛЁД", HudInfoSeverity.ALERT)), lines(HudInfo(0.2f, 400), icy = true))
-        assertEquals(listOf(HudInfoLine("-7° ЛЁД", HudInfoSeverity.ALERT)), lines(HudInfo(-7f, 400), icy = true))
+        assertEquals(listOf(HudInfoLine("18°", HudInfoSeverity.NORMAL)), lines(HudInfo(18f, null)))
+        assertEquals(listOf(HudInfoLine("3° ЛЁД", HudInfoSeverity.WARNING)), lines(HudInfo(3.4f, null), icy = true))
+        assertEquals(listOf(HudInfoLine("4° ЛЁД", HudInfoSeverity.WARNING)), lines(HudInfo(3.6f, null), icy = true))
+        assertEquals(listOf(HudInfoLine("0° ЛЁД", HudInfoSeverity.ALERT)), lines(HudInfo(0.2f, null), icy = true))
+        assertEquals(listOf(HudInfoLine("-7° ЛЁД", HudInfoSeverity.ALERT)), lines(HudInfo(-7f, null), icy = true))
     }
 
     @Test fun theRangeShowsWhenGivenAndIsRedOnAlert() {
