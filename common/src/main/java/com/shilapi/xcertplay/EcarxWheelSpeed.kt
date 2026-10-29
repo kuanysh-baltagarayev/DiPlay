@@ -135,6 +135,16 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     internal fun parked(event: Int): Boolean? = gear(event)?.let { it == VehicleGear.PARK }
 
+    /**
+     * The latest value of any ECARX sensor, or null when it cannot be read. Blocking (a binder call): not
+     * for the main thread.
+     */
+    fun latest(appContext: Context, type: Int): Float? {
+        attach(appContext)
+        val manager = sensor() ?: return null
+        return runCatching { call(manager, "getSensorLatestValue", type) as Float }.getOrNull()
+    }
+
     internal fun metersPerSecond(raw: Float): Double? =
         raw.toDouble().takeIf { it.isFinite() && it in 0.0..MAX_METERS_PER_SECOND }
 

@@ -464,7 +464,8 @@ internal object GeelyClusterMap {
             this.y = y
         }
 
-    private fun windowContext(app: Context, display: Display): Context {
+    /** A context for an overlay window on [display]; shared by the HUD windows. */
+    internal fun windowContext(app: Context, display: Display): Context {
         val displayContext = app.createDisplayContext(display)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             displayContext.createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)

@@ -9,11 +9,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -77,7 +75,7 @@ internal object GeelyHudTest {
             } else {
                 val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
                     ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
-                val displayContext = windowContext(app, display)
+                val displayContext = GeelyClusterMap.windowContext(app, display)
                 val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                     ?: error("no window manager on display $DISPLAY_ID")
                 val created = HudTestView(displayContext, rect)
@@ -106,13 +104,6 @@ internal object GeelyHudTest {
         gravity = Gravity.TOP or Gravity.START
         x = rect.x
         y = rect.y
-    }
-
-    private fun windowContext(app: Context, display: Display): Context {
-        val displayContext = app.createDisplayContext(display)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            displayContext.createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
-        } else displayContext
     }
 
     /** A bright fill, a white frame and a ruler in display pixels: a tick every 10, a number every 100. */

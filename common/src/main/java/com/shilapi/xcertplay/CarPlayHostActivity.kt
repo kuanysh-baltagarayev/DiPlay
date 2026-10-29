@@ -865,7 +865,10 @@ open class CarPlayHostActivity : ComponentActivity() {
         NavigationWidgetUpdater.attach(applicationContext)
         GeelyHudBroadcasts.attach(applicationContext)
         GeelyClusterMap.attach(applicationContext)
-        if (GeelyClusterMap.available(applicationContext)) GeelyHudTest.attach(applicationContext)
+        if (GeelyClusterMap.available(applicationContext)) {
+            GeelyHudTest.attach(applicationContext)
+            GeelyHudInfo.attach(applicationContext)
+        }
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
         MapMirrors.sink = mirrorSink
