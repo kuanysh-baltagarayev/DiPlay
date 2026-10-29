@@ -71,6 +71,7 @@ internal object GeelyHudInfo {
     private var connectedTicks = 0 // worker thread: ticks in a row with the session connected
     private var retryAt = 0L // main thread
 
+    @Synchronized
     fun attach(appContext: Context) {
         if (context != null) return
         val app = appContext.applicationContext
@@ -154,8 +155,12 @@ internal object GeelyHudInfo {
         // A low range is shown once it has been read twice in a row, not on a value the ECU has not set yet,
         // and stays until it is clearly above the threshold.
         lowRangeTicks = if (km != null && km < RANGE_SHOWN_BELOW_KM) lowRangeTicks + 1 else 0
-        rangeShown = if (km == null) false else hudInfoRangeShown(km, rangeShown || lowRangeTicks >= LOW_RANGE_TICKS)
-        rangeAlert = if (km == null) false else hudInfoRangeAlert(km, rangeAlert)
+        rangeShown = when {
+            km == null -> false
+            km < RANGE_SHOWN_BELOW_KM -> rangeShown || lowRangeTicks >= LOW_RANGE_TICKS
+            else -> hudInfoRangeShown(km, rangeShown)
+        }
+        rangeAlert = if (km == null || !rangeShown) false else hudInfoRangeAlert(km, rangeAlert)
         val info = HudInfo(hudInfoTemperature(rawTemperature), km?.takeIf { rangeShown })
         icy = info.temperatureCelsius?.let { hudInfoIcy(it.roundToInt(), icy) } ?: false
         return hudInfoLines(info, icy, rangeAlert, app.getString(R.string.hud_info_ice), app.getString(R.string.hud_info_km))

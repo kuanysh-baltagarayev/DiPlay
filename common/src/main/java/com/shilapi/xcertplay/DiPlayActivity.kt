@@ -2006,7 +2006,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     markReconnectNeeded()
                 }
             }
-            if (EcarxWheelSpeed.present()) {
+            if (EcarxWheelSpeed.present() && GeelyClusterMap.hudMode(this)) {
                 toggle(card, getString(R.string.settings_hud_map_auto),
                     getString(R.string.settings_hud_map_auto_description),
                     GeelyClusterMap.hudAuto(this)) { GeelyClusterMap.saveHudAuto(this, it) }

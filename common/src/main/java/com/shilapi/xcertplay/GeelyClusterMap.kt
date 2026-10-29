@@ -125,6 +125,7 @@ internal object GeelyClusterMap {
     @Volatile private var activeHud = false
     /** HUD mode only: the window follows the route by itself instead of waiting for SRC. */
     @Volatile private var hudAuto = false
+    private var hudRouteSeen = false // main thread: the route that auto already acted on
     private var hudRetryAt = 0L // main thread, elapsedRealtime before which the HUD window is not opened again
     private var context: Context? = null // main thread
     private var connected = false // main thread
@@ -179,6 +180,8 @@ internal object GeelyClusterMap {
     fun saveHudAuto(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HUD_AUTO, on).apply()
         hudAuto = on
+        // Switching it off while the map it opened is showing closes that map; SRC-opened ones stay.
+        if (!on) main.post { if (hudRouteSeen) { hudRouteSeen = false; hideRequested() } }
     }
 
     /** The HUD map window and the size of its stream, in display 2 pixels. */
@@ -277,18 +280,19 @@ internal object GeelyClusterMap {
         override fun run() {
             val app = context ?: return
             if (activeHud && hudAuto) {
+                // Edge-triggered, so SRC stays an override: the route starting opens the map, the route
+                // ending closes it, and nothing in between fights a press of the key.
                 val routeActive = connected && CarPlayGlance.hudSnapshot().maneuverType != null
                 val now = SystemClock.elapsedRealtime()
-                if (routeActive && !wanted && now >= hudRetryAt) {
+                if (routeActive && !hudRouteSeen && now >= hudRetryAt) {
                     wanted = true
-                    if (!show()) {
+                    if (show()) hudRouteSeen = true else {
                         wanted = false
                         hudRetryAt = now + HUD_RETRY_MILLIS
                     }
-                } else if (!routeActive && wanted) {
-                    wanted = false
-                    control(false)
-                    close()
+                } else if (!routeActive && hudRouteSeen) {
+                    hudRouteSeen = false
+                    if (wanted) hideRequested()
                 }
             }
             main.postDelayed(this, HUD_TICK_MILLIS)
@@ -421,11 +425,9 @@ internal object GeelyClusterMap {
         val app = context ?: return false
         if (root != null) return true
         return runCatching {
-            val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
-                ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
-            val displayContext = windowContext(app, display)
-            val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-                ?: error("no window manager on display $DISPLAY_ID")
+            val target = displayWindow(app)
+            val displayContext = target.context
+            val manager = target.manager
             val frame = FrameLayout(displayContext).apply { setBackgroundColor(Color.BLACK) }
             frame.addView(TextureView(displayContext).apply { surfaceTextureListener = MirrorSurface() },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))

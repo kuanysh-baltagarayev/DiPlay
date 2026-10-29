@@ -959,5 +959,5 @@
     <string name="hud_info_ice">ЛЁД</string>
     <string name="hud_info_km">км</string>
     <string name="settings_hud_map_auto">Карта на HUD при навигации</string>
-    <string name="settings_hud_map_auto_description">Сама открывает маленькую карту CarPlay на HUD, когда iPhone начинает вести по маршруту, и закрывает в конце. По умолчанию выключено: тогда карта открывается и закрывается кнопкой (кнопка SRC в MConfig+ с интентом GEELY_CLUSTER_MAP_TOGGLE для com.shihab.diplay). Применяется сразу.</string>
+    <string name="settings_hud_map_auto_description">Сама открывает маленькую карту CarPlay на HUD, когда iPhone начинает вести по маршруту, и закрывает в конце. По умолчанию выключено: тогда карта открывается и закрывается кнопкой (кнопка SRC в MConfig+: действие 38 или свой интент GEELY_CLUSTER_MAP_TOGGLE для com.shihab.diplay); при включённой галочке кнопка имеет приоритет над маршрутом до следующего маршрута. Применяется сразу.</string>
 </resources>
