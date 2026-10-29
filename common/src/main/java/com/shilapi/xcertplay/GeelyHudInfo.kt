@@ -7,18 +7,17 @@ import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PixelFormat
 import android.graphics.Typeface
-import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
-import android.view.Gravity
 import android.view.View
+import android.os.SystemClock
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.host.R
 import kotlin.math.roundToInt
 
 /**
@@ -29,7 +28,9 @@ import kotlin.math.roundToInt
  * sensors, as the cluster's do. It shows while a CarPlay session is connected.
  *
  * `am broadcast -a com.shilapi.xcertplay.GEELY_HUD_INFO -p com.shihab.diplay [--ez on false]
- * [--ei x 468 --ei y 814 --ei w 260 --ei h 96]` switches it off or moves it (display 2 pixels).
+ * [--ei x 468 --ei y 806 --ei w 260 --ei h 96] [--ei rs 1]` switches it off or moves it (display 2
+ * pixels); `rs` is the divisor that turns the range sensor's raw value into km (1 until checked against
+ * the cluster). The change shows at once.
  */
 internal object GeelyHudInfo {
     private const val TAG = "DiPlay-GeelyHudInfo"
@@ -40,13 +41,16 @@ internal object GeelyHudInfo {
     private const val KEY_Y = "y"
     private const val KEY_W = "w"
     private const val KEY_H = "h"
+    private const val KEY_RANGE_DIVISOR = "rs"
     private const val SENSOR_TEMPERATURE_AMBIENT = 1051392
     /** SENSOR_TYPE_ENDURANCE_MILEAGE_FUEL. */
     private const val SENSOR_RANGE = 1054720
     private const val DISPLAY_ID = 2
     private const val TICK_MILLIS = 5_000L
-    /** To be measured on the windshield with [GeelyHudTest]. */
-    private val DEFAULT = HudRect(468, 814, 260, 96)
+    /** Inside the head unit's HUD task ([0,720][728,906]); to be measured on the windshield with [GeelyHudTest]. */
+    private val DEFAULT = HudRect(468, 806, 260, 96)
+    /** After a failed attempt to open the window, to log once and not on every tick. */
+    private const val RETRY_MILLIS = 30_000L
 
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val worker by lazy { Handler(HandlerThread("diplay-geely-hud-info").apply { start() }.looper) }
@@ -55,6 +59,8 @@ internal object GeelyHudInfo {
     private var window: WindowManager? = null // main thread
     private var view: HudInfoView? = null // main thread
     private var lastRaw: Pair<Float?, Float?>? = null // worker thread
+    private var icy = false // worker thread: the ice mark is on, with a hysteresis
+    private var retryAt = 0L // main thread
 
     fun attach(appContext: Context) {
         if (context != null) return
@@ -76,30 +82,40 @@ internal object GeelyHudInfo {
             prefs.getInt(KEY_W, DEFAULT.width), prefs.getInt(KEY_H, DEFAULT.height))
     }
 
+    private fun rangeDivisor(app: Context): Int =
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_RANGE_DIVISOR, 1).coerceIn(1, 1000)
+
     private fun configure(intent: Intent) {
         val app = context ?: return
         val old = rect(app)
         val next = clampHudRect(intent.getIntExtra("x", old.x), intent.getIntExtra("y", old.y),
             intent.getIntExtra("w", old.width), intent.getIntExtra("h", old.height))
         val on = if (intent.hasExtra("on")) intent.getBooleanExtra("on", true) else enabled
+        val divisor = intent.getIntExtra("rs", rangeDivisor(app)).coerceIn(1, 1000)
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ON, on)
-            .putInt(KEY_X, next.x).putInt(KEY_Y, next.y).putInt(KEY_W, next.width).putInt(KEY_H, next.height).apply()
+            .putInt(KEY_X, next.x).putInt(KEY_Y, next.y).putInt(KEY_W, next.width).putInt(KEY_H, next.height)
+            .putInt(KEY_RANGE_DIVISOR, divisor).apply()
         enabled = on
-        hide() // the next tick draws it where it belongs
-        Log.i(TAG, "HUD info ${if (on) "on" else "off"}, window $old -> $next")
+        hide()
+        // Draw again at once, where it belongs now, instead of at the next tick.
+        worker.removeCallbacks(tick)
+        worker.post(tick)
+        Log.i(TAG, "HUD info ${if (on) "on" else "off"}, window $old -> $next, range divisor $divisor")
     }
 
     /** Reads the sensors off the main thread (binder calls) and draws on it. */
     private val tick = object : Runnable {
         override fun run() {
             val app = context ?: return
-            val lines = if (enabled && CarPlayGlance.snapshot().connected) hudInfoLines(read(app)) else emptyList()
+            val lines = runCatching {
+                if (enabled && CarPlayGlance.snapshot().connected) lines(app) else emptyList()
+            }.onFailure { Log.w(TAG, "HUD info read failed", it) }.getOrDefault(emptyList())
             main.post { render(lines) }
             worker.postDelayed(this, TICK_MILLIS)
         }
     }
 
-    private fun read(app: Context): HudInfo {
+    private fun lines(app: Context): List<HudInfoLine> {
         val rawTemperature = EcarxWheelSpeed.latest(app, SENSOR_TEMPERATURE_AMBIENT)
         val rawRange = EcarxWheelSpeed.latest(app, SENSOR_RANGE)
         val raw = rawTemperature to rawRange
@@ -107,42 +123,40 @@ internal object GeelyHudInfo {
             lastRaw = raw
             Log.i(TAG, "sensors: temperature raw $rawTemperature, range raw $rawRange")
         }
-        return HudInfo(hudInfoTemperature(rawTemperature), hudInfoRangeKm(rawRange))
+        val info = HudInfo(hudInfoTemperature(rawTemperature), hudInfoRangeKm(rawRange, rangeDivisor(app)))
+        icy = info.temperatureCelsius?.let { hudInfoIcy(it.roundToInt(), icy) } ?: false
+        return hudInfoLines(info, icy, app.getString(R.string.hud_info_ice), app.getString(R.string.hud_info_km))
     }
 
     private fun render(lines: List<HudInfoLine>) {
         val app = context ?: return
-        if (lines.isEmpty()) {
+        if (!enabled || lines.isEmpty()) {
             hide()
             return
         }
         val shown = view
-        if (shown != null) {
+        if (shown != null && shown.isAttachedToWindow) {
             shown.lines = lines
             shown.invalidate()
             return
         }
+        // The system drops an overlay when its display goes away: open a new one.
+        if (shown != null) hide()
+        val now = SystemClock.elapsedRealtime()
+        if (now < retryAt) return
         runCatching {
-            val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
-                ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
-            val displayContext = GeelyClusterMap.windowContext(app, display)
-            val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-                ?: error("no window manager on display $DISPLAY_ID")
+            val target = GeelyClusterMap.displayWindow(app)
             val rect = rect(app)
-            val created = HudInfoView(displayContext, lines)
-            manager.addView(created, WindowManager.LayoutParams(rect.width, rect.height,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                PixelFormat.TRANSLUCENT).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = rect.x
-                y = rect.y
-            })
-            window = manager
+            val created = HudInfoView(target.context, lines)
+            target.manager.addView(created,
+                GeelyClusterMap.windowParams(rect.x, rect.y, rect.width, rect.height, touchable = false))
+            window = target.manager
             view = created
             Log.i(TAG, "HUD info window $rect shown")
-        }.onFailure { Log.w(TAG, "HUD info window failed", it) }
+        }.onFailure {
+            retryAt = now + RETRY_MILLIS
+            Log.w(TAG, "HUD info window failed, trying again in ${RETRY_MILLIS / 1000} s", it)
+        }
     }
 
     private fun hide() {
@@ -185,37 +199,45 @@ private const val RANGE_SHOWN_BELOW_KM = 100
 private const val RANGE_ALERT_BELOW_KM = 50
 private const val MAX_PLAUSIBLE_RANGE_KM = 1500f
 
+/** The ice mark stays on up to this shown temperature once on, so a reading near 3 does not make it flicker. */
+private const val ICE_ON_AT_OR_BELOW = 3
+private const val ICE_OFF_AT_OR_ABOVE = 5
+
 /** The ambient temperature in degrees Celsius, or null for a reading that is not one. */
 internal fun hudInfoTemperature(raw: Float?): Float? = raw?.takeIf { it.isFinite() && it in -60f..80f }
 
 /**
- * The range in km. The unit is read from the size: a value up to 1500 is km, a larger one metres. Not
- * verified against the cluster yet.
+ * The range in km: the raw value over [divisor] (1 until the sensor is checked against the cluster).
+ * Nothing for a value that is 0 or implausible: a wrong unit must not raise a false alert.
  */
-internal fun hudInfoRangeKm(raw: Float?): Int? {
-    if (raw == null || !raw.isFinite()) return null
-    return when {
-        raw in 0f..MAX_PLAUSIBLE_RANGE_KM -> raw.roundToInt()
-        raw / 1000f in 0f..MAX_PLAUSIBLE_RANGE_KM -> (raw / 1000f).roundToInt()
-        else -> null
-    }
+internal fun hudInfoRangeKm(raw: Float?, divisor: Int = 1): Int? {
+    if (raw == null || !raw.isFinite() || divisor < 1) return null
+    val km = raw / divisor
+    return if (km > 0f && km <= MAX_PLAUSIBLE_RANGE_KM) km.roundToInt() else null
+}
+
+/** The ice mark for the shown [temperature]: on at 3 or below, off again at 5 or above. */
+internal fun hudInfoIcy(temperature: Int, wasIcy: Boolean): Boolean = when {
+    temperature <= ICE_ON_AT_OR_BELOW -> true
+    temperature >= ICE_OFF_AT_OR_ABOVE -> false
+    else -> wasIcy
 }
 
 /**
- * What the corner shows: the temperature always, marked when the road may be icy (the figure shown is 3
- * or below, so the mark always agrees with it), and the range only when it is low.
+ * What the corner shows: the temperature always, marked when the road may be icy, and the range only when
+ * it is low. [icy] comes from [hudInfoIcy].
  */
-internal fun hudInfoLines(info: HudInfo): List<HudInfoLine> = buildList {
+internal fun hudInfoLines(info: HudInfo, icy: Boolean, iceLabel: String, kmLabel: String): List<HudInfoLine> = buildList {
     info.temperatureCelsius?.let { temperature ->
         val shown = temperature.roundToInt()
         val severity = when {
             shown <= 0 -> HudInfoSeverity.ALERT
-            shown <= 3 -> HudInfoSeverity.WARNING
+            icy -> HudInfoSeverity.WARNING
             else -> HudInfoSeverity.NORMAL
         }
-        add(HudInfoLine(if (shown <= 3) "$shown° ЛЁД" else "$shown°", severity))
+        add(HudInfoLine(if (icy) "$shown° $iceLabel" else "$shown°", severity))
     }
     info.rangeKm?.takeIf { it < RANGE_SHOWN_BELOW_KM }?.let { km ->
-        add(HudInfoLine("$km км", if (km < RANGE_ALERT_BELOW_KM) HudInfoSeverity.ALERT else HudInfoSeverity.WARNING))
+        add(HudInfoLine("$km $kmLabel", if (km < RANGE_ALERT_BELOW_KM) HudInfoSeverity.ALERT else HudInfoSeverity.WARNING))
     }
 }

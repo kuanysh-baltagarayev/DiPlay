@@ -135,15 +135,24 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     internal fun parked(event: Int): Boolean? = gear(event)?.let { it == VehicleGear.PARK }
 
+    private val supportedTypes = HashMap<Int, Boolean>() // guarded by itself
+
     /**
-     * The latest value of any ECARX sensor, or null when it cannot be read. Blocking (a binder call): not
-     * for the main thread.
+     * The latest value of any ECARX sensor, or null when it cannot be read or the sensor is not
+     * supported (an unsupported sensor may read 0). Blocking (a binder call): not for the main thread.
      */
     fun latest(appContext: Context, type: Int): Float? {
         attach(appContext)
         val manager = sensor() ?: return null
-        return runCatching { call(manager, "getSensorLatestValue", type) as Float }.getOrNull()
+        val supported = synchronized(supportedTypes) { supportedTypes[type] } ?: runCatching {
+            call(manager, "isSensorSupported", type)?.toString().let { it != null && it != "notavailable" && it != "error" }
+        }.getOrNull()?.also { synchronized(supportedTypes) { supportedTypes[type] = it } } ?: return null
+        if (!supported) return null
+        return latestValue(manager, type)
     }
+
+    private fun latestValue(manager: Any, type: Int): Float? =
+        runCatching { call(manager, "getSensorLatestValue", type) as Float }.getOrNull()
 
     internal fun metersPerSecond(raw: Float): Double? =
         raw.toDouble().takeIf { it.isFinite() && it in 0.0..MAX_METERS_PER_SECOND }
@@ -158,7 +167,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         }
         if (!speedSupported(sensor)) return
         val before = SystemClock.elapsedRealtime()
-        val raw = runCatching { call(sensor, "getSensorLatestValue", SENSOR_TYPE_CAR_SPEED) as Float }.getOrNull() ?: return
+        val raw = latestValue(sensor, SENSOR_TYPE_CAR_SPEED) ?: return
         val speed = metersPerSecond(raw) ?: return
         val sample = VehicleSpeedSample((before + SystemClock.elapsedRealtime()) / 2, speed)
         synchronized(this) {

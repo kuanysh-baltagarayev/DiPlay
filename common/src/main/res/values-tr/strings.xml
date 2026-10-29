@@ -1044,4 +1044,6 @@
     <string name="settings_existing_wifi_interface_description">Yalnızca yerel ağ (LAN) bağlantısı Android\'in Wi-Fi olarak bildirmediği bir arayüzde (örneğin eth1 üzerindeki bir USB ağ kartı) çalışan üniteler içindir. Otomatik seçilmesi için boş bırakın.</string>
     <string name="settings_ecarx_video_while_parked_description">iOS 27: Vites P konumundayken iPhone\'dan CarPlay\'e gönderdiğiniz video araç ekranında görünür. Vites bilgisi ECARX araç verisinden gelir, ADB gerekmez. P\'den çıktığınızda oynatıcı kapanır. Düz HTTPS videolar (örneğin Safari\'den) oynar; Apple TV+ gibi FairPlay korumalı videolar lisanslı bir alıcı gerektirir ve burada oynamaz. Bir sonraki bağlantıda uygulanır.</string>
     <string name="update_installing_quietly">Arka planda yükleniyor. CarPlay yaklaşık bir dakika içinde yeniden başlayacak.</string>
+    <string name="hud_info_ice">BUZ</string>
+    <string name="hud_info_km">km</string>
 </resources>

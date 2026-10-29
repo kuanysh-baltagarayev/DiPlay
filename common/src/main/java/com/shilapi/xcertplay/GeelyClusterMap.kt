@@ -454,7 +454,7 @@ internal object GeelyClusterMap {
         }.onFailure { Log.w(TAG, "cluster map window failed", it) }.isSuccess
     }
 
-    private fun windowParams(x: Int, y: Int, width: Int, height: Int, touchable: Boolean = true) =
+    internal fun windowParams(x: Int, y: Int, width: Int, height: Int, touchable: Boolean = true) =
         WindowManager.LayoutParams(width, height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
                 (if (touchable) 0 else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE),
@@ -463,6 +463,19 @@ internal object GeelyClusterMap {
             this.x = x
             this.y = y
         }
+
+    /** The context to build a view for display 2 and the window manager to add it with. */
+    internal class DisplayWindow(val context: Context, val manager: WindowManager)
+
+    /** Display 2's overlay context and window manager; throws when the display or its manager is missing. */
+    internal fun displayWindow(app: Context): DisplayWindow {
+        val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+            ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
+        val displayContext = windowContext(app, display)
+        val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            ?: error("no window manager on display $DISPLAY_ID")
+        return DisplayWindow(displayContext, manager)
+    }
 
     /** A context for an overlay window on [display]; shared by the HUD windows. */
     internal fun windowContext(app: Context, display: Display): Context {

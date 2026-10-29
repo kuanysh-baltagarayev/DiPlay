@@ -7,12 +7,9 @@ import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
@@ -73,14 +70,10 @@ internal object GeelyHudTest {
                 window?.updateViewLayout(existing, params(rect))
                 existing.invalidate()
             } else {
-                val display = (app.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
-                    ?.getDisplay(DISPLAY_ID) ?: error("display $DISPLAY_ID is missing")
-                val displayContext = GeelyClusterMap.windowContext(app, display)
-                val manager = displayContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-                    ?: error("no window manager on display $DISPLAY_ID")
-                val created = HudTestView(displayContext, rect)
-                manager.addView(created, params(rect))
-                window = manager
+                val target = GeelyClusterMap.displayWindow(app)
+                val created = HudTestView(target.context, rect)
+                target.manager.addView(created, params(rect))
+                window = target.manager
                 view = created
             }
             Log.i(TAG, "HUD test window ${rect.width}x${rect.height} at ${rect.x},${rect.y} on display $DISPLAY_ID")
@@ -96,15 +89,8 @@ internal object GeelyHudTest {
         Log.i(TAG, "HUD test window removed")
     }
 
-    private fun params(rect: HudRect) = WindowManager.LayoutParams(rect.width, rect.height,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-        PixelFormat.TRANSLUCENT).apply {
-        gravity = Gravity.TOP or Gravity.START
-        x = rect.x
-        y = rect.y
-    }
+    private fun params(rect: HudRect) =
+        GeelyClusterMap.windowParams(rect.x, rect.y, rect.width, rect.height, touchable = false)
 
     /** A bright fill, a white frame and a ruler in display pixels: a tick every 10, a number every 100. */
     private class HudTestView(context: Context, var rect: HudRect) : View(context) {

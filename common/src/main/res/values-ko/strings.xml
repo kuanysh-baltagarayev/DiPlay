@@ -1052,4 +1052,6 @@
     <string name="last_connection_attempt">마지막 연결 시도(%1$s): %2$s</string>
     <string name="settings_ecarx_video_while_parked_description">iOS 27: 기어가 P에 있는 동안 iPhone에서 CarPlay로 보내는 동영상이 차량 화면에 표시됩니다. 기어 정보는 ECARX 차량 데이터에서 가져오므로 ADB가 필요 없습니다. P를 벗어나면 플레이어가 닫힙니다. 일반 HTTPS 동영상(예: Safari)은 재생되지만, Apple TV+ 같은 FairPlay 보호 동영상은 라이선스가 있는 수신기가 필요하므로 여기서는 재생되지 않습니다. 다음 연결부터 적용됩니다.</string>
     <string name="update_installing_quietly">백그라운드에서 설치하는 중입니다. CarPlay가 약 1분 후 다시 시작됩니다.</string>
+    <string name="hud_info_ice">빙판</string>
+    <string name="hud_info_km">km</string>
 </resources>
