@@ -46,6 +46,8 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     @Volatile private var context: Context? = null
     @Volatile private var sensor: Any? = null
+    /** The poll, the video gate and the HUD readout all ask for the sensor manager: one lookup at a time. */
+    private val sensorLock = Any()
     @Volatile private var speedSupported: Boolean? = null
     @Volatile private var lastAttemptAt = 0L
     private var executor: ScheduledExecutorService? = null
@@ -201,7 +203,9 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
      * The ECARX sensor manager. The ECARX framework can come up after DiPlay at boot, so a failed
      * lookup is retried, but at most every few seconds: the poll and the video gate both ask.
      */
-    private fun sensor(): Any? {
+    private fun sensor(): Any? = synchronized(sensorLock) { findSensor() }
+
+    private fun findSensor(): Any? {
         sensor?.let { return it }
         val app = context ?: return null
         val now = SystemClock.elapsedRealtime()

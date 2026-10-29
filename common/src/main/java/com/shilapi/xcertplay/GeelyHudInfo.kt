@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * sensors, as the cluster's do. It shows while a CarPlay session is connected.
  *
  * `am broadcast -a com.shilapi.xcertplay.GEELY_HUD_INFO -p com.shihab.diplay [--ez on false]
- * [--ei x 468 --ei y 828 --ei w 260 --ei h 78] [--ei rs 1]` switches it off or moves it (display 2
+ * [--ei x 452 --ei y 828 --ei w 260 --ei h 78] [--ei rs 1]` switches it off or moves it (display 2
  * pixels); `rs` is the divisor that turns the range sensor's raw value into km (1 until checked against
  * the cluster). The change shows at once.
  */
@@ -48,9 +48,11 @@ internal object GeelyHudInfo {
     private const val DISPLAY_ID = 2
     private const val TICK_MILLIS = 5_000L
     /** Inside the head unit's HUD task ([0,720][728,906]); to be measured on the windshield with [GeelyHudTest]. */
-    private val DEFAULT = HudRect(468, 828, 260, 78)
+    private val DEFAULT = HudRect(452, 828, 260, 78)
     /** Ticks in a row a low range has to be read before it is shown. */
     private const val LOW_RANGE_TICKS = 2
+    /** Ticks with the session connected before anything shows: the ECU may not have set its values yet. */
+    private const val SETTLED_TICKS = 2
     /** After a failed attempt to open the window, to log once and not on every tick. */
     private const val RETRY_MILLIS = 30_000L
 
@@ -64,6 +66,9 @@ internal object GeelyHudInfo {
     private var lastImplausible: Pair<Float?, Float?>? = null // worker thread
     private var icy = false // worker thread: the ice mark is on, with a hysteresis
     private var lowRangeTicks = 0 // worker thread: readings in a row below the shown range
+    private var rangeShown = false // worker thread: the low range is on, with a hysteresis
+    private var rangeAlert = false // worker thread: the range is red, with a hysteresis
+    private var connectedTicks = 0 // worker thread: ticks in a row with the session connected
     private var retryAt = 0L // main thread
 
     fun attach(appContext: Context) {
@@ -102,25 +107,35 @@ internal object GeelyHudInfo {
         enabled = on
         hide()
         // Draw again at once, where it belongs now, instead of at the next tick.
-        worker.removeCallbacks(tick)
-        worker.post(tick)
+        worker.post { refresh() }
         Log.i(TAG, "HUD info ${if (on) "on" else "off"}, window $old -> $next, range divisor $divisor")
     }
 
-    /** Reads the sensors off the main thread (binder calls) and draws on it. */
+    /** Reads the sensors off the main thread (binder calls) and draws on it. One chain, one tick at a time. */
     private val tick = object : Runnable {
         override fun run() {
-            val app = context ?: return
-            val lines = runCatching {
-                if (enabled && CarPlayGlance.snapshot().connected) lines(app) else {
-                    icy = false
-                    lowRangeTicks = 0
-                    emptyList()
-                }
-            }.onFailure { Log.w(TAG, "HUD info read failed", it) }.getOrDefault(emptyList())
-            main.post { render(lines) }
+            refresh()
             worker.postDelayed(this, TICK_MILLIS)
         }
+    }
+
+    /** Reads and draws once, on the worker thread; a change of settings asks for it without a second chain. */
+    private fun refresh() {
+        val app = context ?: return
+        val lines = runCatching {
+            if (enabled && CarPlayGlance.snapshot().connected) {
+                connectedTicks++
+                lines(app).takeIf { connectedTicks >= SETTLED_TICKS } ?: emptyList()
+            } else {
+                icy = false
+                lowRangeTicks = 0
+                rangeShown = false
+                rangeAlert = false
+                connectedTicks = 0
+                emptyList()
+            }
+        }.onFailure { Log.w(TAG, "HUD info read failed", it) }.getOrDefault(emptyList())
+        main.post { render(lines) }
     }
 
     private fun lines(app: Context): List<HudInfoLine> {
@@ -136,11 +151,14 @@ internal object GeelyHudInfo {
             lastImplausible = raw
             Log.w(TAG, "range raw $rawRange is not a plausible range with divisor ${rangeDivisor(app)}: not shown")
         }
-        // A low range is shown once it has been read twice in a row, not on a value the ECU has not set yet.
+        // A low range is shown once it has been read twice in a row, not on a value the ECU has not set yet,
+        // and stays until it is clearly above the threshold.
         lowRangeTicks = if (km != null && km < RANGE_SHOWN_BELOW_KM) lowRangeTicks + 1 else 0
-        val info = HudInfo(hudInfoTemperature(rawTemperature), km?.takeIf { lowRangeTicks >= LOW_RANGE_TICKS })
+        rangeShown = if (km == null) false else hudInfoRangeShown(km, rangeShown || lowRangeTicks >= LOW_RANGE_TICKS)
+        rangeAlert = if (km == null) false else hudInfoRangeAlert(km, rangeAlert)
+        val info = HudInfo(hudInfoTemperature(rawTemperature), km?.takeIf { rangeShown })
         icy = info.temperatureCelsius?.let { hudInfoIcy(it.roundToInt(), icy) } ?: false
-        return hudInfoLines(info, icy, app.getString(R.string.hud_info_ice), app.getString(R.string.hud_info_km))
+        return hudInfoLines(info, icy, rangeAlert, app.getString(R.string.hud_info_ice), app.getString(R.string.hud_info_km))
     }
 
     private fun render(lines: List<HudInfoLine>) {
@@ -205,16 +223,18 @@ internal object GeelyHudInfo {
             val rowHeight = height / 2f
             paint.textSize = rowHeight * 0.8f
             // Shrink the text until the longest line fits the window.
-            val room = width - 16f
+            val room = width - 24f
             val longest = lines.maxOfOrNull { paint.measureText(it.text) } ?: 0f
             if (longest > room && longest > 0f) paint.textSize = (paint.textSize * room / longest).coerceAtLeast(8f)
+            // From the bottom, so the block does not jump when the second line comes or goes.
             lines.forEachIndexed { index, line ->
                 paint.color = when (line.severity) {
                     HudInfoSeverity.NORMAL -> Color.WHITE
                     HudInfoSeverity.WARNING -> Color.rgb(255, 179, 0)
                     HudInfoSeverity.ALERT -> Color.rgb(255, 59, 48)
                 }
-                canvas.drawText(line.text, width - 8f, rowHeight * (index + 1) - rowHeight * 0.2f, paint)
+                val fromBottom = lines.size - 1 - index
+                canvas.drawText(line.text, width - 16f, height - rowHeight * fromBottom - rowHeight * 0.2f, paint)
             }
         }
     }
@@ -229,6 +249,9 @@ internal data class HudInfoLine(val text: String, val severity: HudInfoSeverity)
 /** The range is shown only below this, in km. */
 private const val RANGE_SHOWN_BELOW_KM = 100
 private const val RANGE_ALERT_BELOW_KM = 50
+/** Once shown, the range goes again only at or above these: a reading near a threshold does not flicker. */
+private const val RANGE_HIDDEN_AT_OR_ABOVE_KM = 110
+private const val RANGE_ALERT_OFF_AT_OR_ABOVE_KM = 55
 private const val MAX_PLAUSIBLE_RANGE_KM = 1500f
 
 /** The ice mark stays on up to this shown temperature once on, so a reading near 3 does not make it flicker. */
@@ -249,6 +272,20 @@ internal fun hudInfoRangeKm(raw: Float?, divisor: Int = 1): Int? {
     return if (km >= 0f && km <= MAX_PLAUSIBLE_RANGE_KM) km.roundToInt() else null
 }
 
+/** Whether the low range shows: from below 100 km, until 110 or more once it does. */
+internal fun hudInfoRangeShown(km: Int, wasShown: Boolean): Boolean = when {
+    km < RANGE_SHOWN_BELOW_KM -> true
+    km >= RANGE_HIDDEN_AT_OR_ABOVE_KM -> false
+    else -> wasShown
+}
+
+/** Whether the low range is red: from below 50 km, until 55 or more once it is. */
+internal fun hudInfoRangeAlert(km: Int, wasAlert: Boolean): Boolean = when {
+    km < RANGE_ALERT_BELOW_KM -> true
+    km >= RANGE_ALERT_OFF_AT_OR_ABOVE_KM -> false
+    else -> wasAlert
+}
+
 /** The ice mark for the shown [temperature]: on at 3 or below, off again at 5 or above. */
 internal fun hudInfoIcy(temperature: Int, wasIcy: Boolean): Boolean = when {
     temperature <= ICE_ON_AT_OR_BELOW -> true
@@ -257,10 +294,12 @@ internal fun hudInfoIcy(temperature: Int, wasIcy: Boolean): Boolean = when {
 }
 
 /**
- * What the corner shows: the temperature always, marked when the road may be icy, and the range only when
- * it is low. [icy] comes from [hudInfoIcy].
+ * What the corner shows: the temperature always, marked when the road may be icy, and the range when it
+ * is low ([info] has it only then). [icy] comes from [hudInfoIcy], [rangeAlert] from [hudInfoRangeAlert].
  */
-internal fun hudInfoLines(info: HudInfo, icy: Boolean, iceLabel: String, kmLabel: String): List<HudInfoLine> = buildList {
+internal fun hudInfoLines(
+    info: HudInfo, icy: Boolean, rangeAlert: Boolean, iceLabel: String, kmLabel: String,
+): List<HudInfoLine> = buildList {
     info.temperatureCelsius?.let { temperature ->
         val shown = temperature.roundToInt()
         val severity = when {
@@ -270,7 +309,7 @@ internal fun hudInfoLines(info: HudInfo, icy: Boolean, iceLabel: String, kmLabel
         }
         add(HudInfoLine(if (icy) "$shown° $iceLabel" else "$shown°", severity))
     }
-    info.rangeKm?.takeIf { it < RANGE_SHOWN_BELOW_KM }?.let { km ->
-        add(HudInfoLine("$km $kmLabel", if (km < RANGE_ALERT_BELOW_KM) HudInfoSeverity.ALERT else HudInfoSeverity.WARNING))
+    info.rangeKm?.let { km ->
+        add(HudInfoLine("$km $kmLabel", if (rangeAlert) HudInfoSeverity.ALERT else HudInfoSeverity.WARNING))
     }
 }

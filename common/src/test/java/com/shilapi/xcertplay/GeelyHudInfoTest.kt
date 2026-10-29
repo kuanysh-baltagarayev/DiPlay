@@ -7,7 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeelyHudInfoTest {
-    private fun lines(info: HudInfo, icy: Boolean = false) = hudInfoLines(info, icy, "ЛЁД", "км")
+    private fun lines(info: HudInfo, icy: Boolean = false, alert: Boolean = false) =
+        hudInfoLines(info, icy, alert, "ЛЁД", "км")
 
     @Test fun aReadingThatIsNotATemperatureIsDropped() {
         assertEquals(-5.5f, hudInfoTemperature(-5.5f))
@@ -43,14 +44,25 @@ class GeelyHudInfoTest {
         assertEquals(listOf(HudInfoLine("-7° ЛЁД", HudInfoSeverity.ALERT)), lines(HudInfo(-7f, 400), icy = true))
     }
 
-    @Test fun theRangeShowsOnlyWhenLow() {
-        assertEquals(1, lines(HudInfo(18f, 100)).size)
-        assertEquals(HudInfoLine("99 км", HudInfoSeverity.WARNING), lines(HudInfo(18f, 99)).last())
-        assertEquals(HudInfoLine("49 км", HudInfoSeverity.ALERT), lines(HudInfo(18f, 49)).last())
+    @Test fun theRangeShowsWhenGivenAndIsRedOnAlert() {
+        assertEquals(listOf(HudInfoLine("99 км", HudInfoSeverity.WARNING)), lines(HudInfo(null, 99)))
+        assertEquals(listOf(HudInfoLine("49 км", HudInfoSeverity.ALERT)), lines(HudInfo(null, 49), alert = true))
+        assertEquals(1, lines(HudInfo(18f, null)).size)
+    }
+
+    @Test fun theLowRangeAndItsRedHaveAHysteresis() {
+        assertTrue(hudInfoRangeShown(99, false))
+        assertTrue(hudInfoRangeShown(105, true))
+        assertFalse(hudInfoRangeShown(105, false))
+        assertFalse(hudInfoRangeShown(110, true))
+        assertTrue(hudInfoRangeAlert(49, false))
+        assertTrue(hudInfoRangeAlert(52, true))
+        assertFalse(hudInfoRangeAlert(52, false))
+        assertFalse(hudInfoRangeAlert(55, true))
     }
 
     @Test fun withoutReadingsNothingShows() {
         assertEquals(emptyList<HudInfoLine>(), lines(HudInfo(null, null)))
-        assertEquals(listOf(HudInfoLine("12 км", HudInfoSeverity.ALERT)), lines(HudInfo(null, 12)))
+        assertEquals(listOf(HudInfoLine("12 км", HudInfoSeverity.ALERT)), lines(HudInfo(null, 12), alert = true))
     }
 }
