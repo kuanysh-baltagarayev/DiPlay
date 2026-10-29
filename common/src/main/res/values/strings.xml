@@ -1061,4 +1061,6 @@
     <string name="settings_cluster_speedometer_album_color_description">Match the album frame color with smooth transitions. Keeps the selected opacity.</string>
     <string name="hud_info_ice">ICE</string>
     <string name="hud_info_km">km</string>
+    <string name="settings_hud_map_auto">HUD map with navigation</string>
+    <string name="settings_hud_map_auto_description">Opens the small CarPlay map on the windshield HUD by itself when the iPhone starts guiding a route, and closes it at the end. Off by default: then the map is opened and closed with a button (an MConfig+ SRC key sending GEELY_CLUSTER_MAP_TOGGLE to com.shihab.diplay). Applies at once.</string>
 </resources>

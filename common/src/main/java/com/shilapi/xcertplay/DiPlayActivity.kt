@@ -2006,6 +2006,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     markReconnectNeeded()
                 }
             }
+            if (EcarxWheelSpeed.present()) {
+                toggle(card, getString(R.string.settings_hud_map_auto),
+                    getString(R.string.settings_hud_map_auto_description),
+                    GeelyClusterMap.hudAuto(this)) { GeelyClusterMap.saveHudAuto(this, it) }
+            }
             toggle(card, getString(R.string.efficient_video), getString(R.string.use_hevc_leave_off_for_the_widest_head_unit_compatibility), AirPlayPersistence.loadHevcEnabled(this)) {
                 AirPlayPersistence.saveHevcEnabled(this, it)
                 markReconnectNeeded()

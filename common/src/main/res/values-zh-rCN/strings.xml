@@ -1018,4 +1018,6 @@
     <string name="settings_cluster_speedometer_album_color_description">平滑过渡到专辑边框的颜色，并保留所选的不透明度。</string>
     <string name="hud_info_ice">结冰</string>
     <string name="hud_info_km">公里</string>
+    <string name="settings_hud_map_auto">导航时自动显示HUD地图</string>
+    <string name="settings_hud_map_auto_description">iPhone开始路线引导时，自动在挡风玻璃HUD上打开小型CarPlay地图，引导结束时关闭。默认关闭：此时用按键打开和关闭地图（MConfig+的SRC键向com.shihab.diplay发送GEELY_CLUSTER_MAP_TOGGLE）。立即生效。</string>
 </resources>

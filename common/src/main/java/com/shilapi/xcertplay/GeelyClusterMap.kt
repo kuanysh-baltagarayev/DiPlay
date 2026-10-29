@@ -171,8 +171,15 @@ internal object GeelyClusterMap {
     fun hudMode(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
 
-    private fun hudAuto(context: Context): Boolean =
+    /** Whether the HUD map opens by itself while a route is guided (off by default). */
+    fun hudAuto(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_AUTO, false)
+
+    /** Saves the setting; it applies at once, no reconnection needed. */
+    fun saveHudAuto(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HUD_AUTO, on).apply()
+        hudAuto = on
+    }
 
     /** The HUD map window and the size of its stream, in display 2 pixels. */
     fun hudRect(context: Context): HudRect {

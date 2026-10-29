@@ -1054,4 +1054,6 @@
     <string name="update_installing_quietly">백그라운드에서 설치하는 중입니다. CarPlay가 약 1분 후 다시 시작됩니다.</string>
     <string name="hud_info_ice">빙판</string>
     <string name="hud_info_km">km</string>
+    <string name="settings_hud_map_auto">내비게이션 시 HUD 지도</string>
+    <string name="settings_hud_map_auto_description">iPhone이 경로 안내를 시작하면 앞유리 HUD에 작은 CarPlay 지도를 자동으로 열고, 안내가 끝나면 닫습니다. 기본값은 꺼짐이며, 이때는 버튼(MConfig+ SRC 키가 GEELY_CLUSTER_MAP_TOGGLE을 com.shihab.diplay로 전송)으로 지도를 열고 닫습니다. 바로 적용됩니다.</string>
 </resources>

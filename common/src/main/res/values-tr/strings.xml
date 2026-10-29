@@ -1046,4 +1046,6 @@
     <string name="update_installing_quietly">Arka planda yükleniyor. CarPlay yaklaşık bir dakika içinde yeniden başlayacak.</string>
     <string name="hud_info_ice">BUZ</string>
     <string name="hud_info_km">km</string>
+    <string name="settings_hud_map_auto">Navigasyonla HUD haritası</string>
+    <string name="settings_hud_map_auto_description">iPhone bir rotada yönlendirmeye başlayınca ön cam HUD üzerindeki küçük CarPlay haritasını kendiliğinden açar, rota bitince kapatır. Varsayılan olarak kapalı: harita bir düğmeyle açılıp kapatılır (MConfig+ SRC tuşu, com.shihab.diplay için GEELY_CLUSTER_MAP_TOGGLE gönderir). Hemen uygulanır.</string>
 </resources>

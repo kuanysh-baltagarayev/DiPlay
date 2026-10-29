@@ -1060,4 +1060,6 @@
     <string name="settings_cluster_speedometer_album_color_description">アルバムの枠の色に滑らかに切り替わります。選択した不透明度は維持されます。</string>
     <string name="hud_info_ice">凍結</string>
     <string name="hud_info_km">km</string>
+    <string name="settings_hud_map_auto">ナビ開始時にHUDマップ</string>
+    <string name="settings_hud_map_auto_description">iPhoneがルート案内を始めると、フロントガラスHUDに小さなCarPlayマップを自動で開き、案内の終了時に閉じます。初期設定はオフで、その場合はボタン（MConfig+のSRCキーでGEELY_CLUSTER_MAP_TOGGLEをcom.shihab.diplayへ送信）で開閉します。すぐに反映されます。</string>
 </resources>
