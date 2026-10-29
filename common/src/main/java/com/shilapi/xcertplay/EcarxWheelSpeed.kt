@@ -156,14 +156,15 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         val known = synchronized(supportedTypes) {
             when {
                 type in supportedTypes -> true
-                (deniedAt[type] ?: Long.MIN_VALUE).let { now - it < ASK_AGAIN_MILLIS } -> false
+                deniedAt[type]?.let { now - it < ASK_AGAIN_MILLIS } == true -> false
                 else -> null
             }
         }
         if (known == false) return null
         if (known == null) {
-            val supported = runCatching { statusSupported(call(manager, "isSensorSupported", type)?.toString()) }
-                .getOrNull() ?: return null
+            val status = runCatching { call(manager, "isSensorSupported", type)?.toString() }
+            val supported = status.getOrNull().let(::statusSupported)
+            Log.i(TAG, "sensor $type support: ${status.getOrNull() ?: status.exceptionOrNull()}")
             synchronized(supportedTypes) { if (supported) supportedTypes += type else deniedAt[type] = now }
             if (!supported) return null
         }
