@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * sensors, as the cluster's do. It shows while a CarPlay session is connected.
  *
  * `am broadcast -a com.shilapi.xcertplay.GEELY_HUD_INFO -p com.shihab.diplay [--ez on false]
- * [--ei x 468 --ei y 806 --ei w 260 --ei h 96] [--ei rs 1]` switches it off or moves it (display 2
+ * [--ei x 468 --ei y 828 --ei w 260 --ei h 78] [--ei rs 1]` switches it off or moves it (display 2
  * pixels); `rs` is the divisor that turns the range sensor's raw value into km (1 until checked against
  * the cluster). The change shows at once.
  */
@@ -48,7 +48,9 @@ internal object GeelyHudInfo {
     private const val DISPLAY_ID = 2
     private const val TICK_MILLIS = 5_000L
     /** Inside the head unit's HUD task ([0,720][728,906]); to be measured on the windshield with [GeelyHudTest]. */
-    private val DEFAULT = HudRect(468, 806, 260, 96)
+    private val DEFAULT = HudRect(468, 828, 260, 78)
+    /** Ticks in a row a low range has to be read before it is shown. */
+    private const val LOW_RANGE_TICKS = 2
     /** After a failed attempt to open the window, to log once and not on every tick. */
     private const val RETRY_MILLIS = 30_000L
 
@@ -59,7 +61,9 @@ internal object GeelyHudInfo {
     private var window: WindowManager? = null // main thread
     private var view: HudInfoView? = null // main thread
     private var lastRaw: Pair<Float?, Float?>? = null // worker thread
+    private var lastImplausible: Pair<Float?, Float?>? = null // worker thread
     private var icy = false // worker thread: the ice mark is on, with a hysteresis
+    private var lowRangeTicks = 0 // worker thread: readings in a row below the shown range
     private var retryAt = 0L // main thread
 
     fun attach(appContext: Context) {
@@ -108,7 +112,11 @@ internal object GeelyHudInfo {
         override fun run() {
             val app = context ?: return
             val lines = runCatching {
-                if (enabled && CarPlayGlance.snapshot().connected) lines(app) else emptyList()
+                if (enabled && CarPlayGlance.snapshot().connected) lines(app) else {
+                    icy = false
+                    lowRangeTicks = 0
+                    emptyList()
+                }
             }.onFailure { Log.w(TAG, "HUD info read failed", it) }.getOrDefault(emptyList())
             main.post { render(lines) }
             worker.postDelayed(this, TICK_MILLIS)
@@ -123,7 +131,14 @@ internal object GeelyHudInfo {
             lastRaw = raw
             Log.i(TAG, "sensors: temperature raw $rawTemperature, range raw $rawRange")
         }
-        val info = HudInfo(hudInfoTemperature(rawTemperature), hudInfoRangeKm(rawRange, rangeDivisor(app)))
+        val km = hudInfoRangeKm(rawRange, rangeDivisor(app))
+        if (rawRange != null && km == null && raw != lastImplausible) {
+            lastImplausible = raw
+            Log.w(TAG, "range raw $rawRange is not a plausible range with divisor ${rangeDivisor(app)}: not shown")
+        }
+        // A low range is shown once it has been read twice in a row, not on a value the ECU has not set yet.
+        lowRangeTicks = if (km != null && km < RANGE_SHOWN_BELOW_KM) lowRangeTicks + 1 else 0
+        val info = HudInfo(hudInfoTemperature(rawTemperature), km?.takeIf { lowRangeTicks >= LOW_RANGE_TICKS })
         icy = info.temperatureCelsius?.let { hudInfoIcy(it.roundToInt(), icy) } ?: false
         return hudInfoLines(info, icy, app.getString(R.string.hud_info_ice), app.getString(R.string.hud_info_km))
     }
@@ -135,7 +150,7 @@ internal object GeelyHudInfo {
             return
         }
         val shown = view
-        if (shown != null && shown.isAttachedToWindow) {
+        if (shown != null && !shown.dead) {
             shown.lines = lines
             shown.invalidate()
             return
@@ -168,14 +183,31 @@ internal object GeelyHudInfo {
 
     /** The lines, right-aligned from the top, in one colour each: white, amber for a warning, red for an alert. */
     private class HudInfoView(context: Context, var lines: List<HudInfoLine>) : View(context) {
+        /** The system took the window away (its display went); a view not yet attached is not dead. */
+        @Volatile var dead = false
+            private set
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.DEFAULT_BOLD
             textAlign = Paint.Align.RIGHT
         }
 
+        init {
+            addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) = Unit
+
+                override fun onViewDetachedFromWindow(v: View) {
+                    dead = true
+                }
+            })
+        }
+
         override fun onDraw(canvas: Canvas) {
             val rowHeight = height / 2f
             paint.textSize = rowHeight * 0.8f
+            // Shrink the text until the longest line fits the window.
+            val room = width - 16f
+            val longest = lines.maxOfOrNull { paint.measureText(it.text) } ?: 0f
+            if (longest > room && longest > 0f) paint.textSize = (paint.textSize * room / longest).coerceAtLeast(8f)
             lines.forEachIndexed { index, line ->
                 paint.color = when (line.severity) {
                     HudInfoSeverity.NORMAL -> Color.WHITE
@@ -208,12 +240,13 @@ internal fun hudInfoTemperature(raw: Float?): Float? = raw?.takeIf { it.isFinite
 
 /**
  * The range in km: the raw value over [divisor] (1 until the sensor is checked against the cluster).
- * Nothing for a value that is 0 or implausible: a wrong unit must not raise a false alert.
+ * Nothing for a value that is negative or implausible: a wrong unit must not raise a false alert. A
+ * range of 0 is a range: the empty tank is the case that matters most.
  */
 internal fun hudInfoRangeKm(raw: Float?, divisor: Int = 1): Int? {
     if (raw == null || !raw.isFinite() || divisor < 1) return null
     val km = raw / divisor
-    return if (km > 0f && km <= MAX_PLAUSIBLE_RANGE_KM) km.roundToInt() else null
+    return if (km >= 0f && km <= MAX_PLAUSIBLE_RANGE_KM) km.roundToInt() else null
 }
 
 /** The ice mark for the shown [temperature]: on at 3 or below, off again at 5 or above. */

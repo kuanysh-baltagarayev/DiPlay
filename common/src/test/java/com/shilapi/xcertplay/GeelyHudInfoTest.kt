@@ -20,7 +20,7 @@ class GeelyHudInfoTest {
         assertEquals(412, hudInfoRangeKm(412f))
         assertEquals(412, hudInfoRangeKm(41_200f, 100))
         assertNull(hudInfoRangeKm(41_200f)) // a wrong unit shows nothing rather than a false alert
-        assertNull(hudInfoRangeKm(0f))
+        assertEquals(0, hudInfoRangeKm(0f))
         assertNull(hudInfoRangeKm(-1f))
         assertNull(hudInfoRangeKm(Float.NaN))
         assertNull(hudInfoRangeKm(null))

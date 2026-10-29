@@ -135,7 +135,13 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     internal fun parked(event: Int): Boolean? = gear(event)?.let { it == VehicleGear.PARK }
 
-    private val supportedTypes = HashMap<Int, Boolean>() // guarded by itself
+    private val supportedTypes = HashSet<Int>() // guarded by itself: only a yes is kept
+    private val deniedAt = HashMap<Int, Long>() // guarded by supportedTypes: when a no was last heard
+
+    /** The framework may answer "no" while it is still coming up, so a no is asked again after a while. */
+    private const val ASK_AGAIN_MILLIS = 30_000L
+
+    private fun statusSupported(status: String?): Boolean = status != null && status != "notavailable" && status != "error"
 
     /**
      * The latest value of any ECARX sensor, or null when it cannot be read or the sensor is not
@@ -144,10 +150,21 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     fun latest(appContext: Context, type: Int): Float? {
         attach(appContext)
         val manager = sensor() ?: return null
-        val supported = synchronized(supportedTypes) { supportedTypes[type] } ?: runCatching {
-            call(manager, "isSensorSupported", type)?.toString().let { it != null && it != "notavailable" && it != "error" }
-        }.getOrNull()?.also { synchronized(supportedTypes) { supportedTypes[type] = it } } ?: return null
-        if (!supported) return null
+        val now = SystemClock.elapsedRealtime()
+        val known = synchronized(supportedTypes) {
+            when {
+                type in supportedTypes -> true
+                (deniedAt[type] ?: Long.MIN_VALUE).let { now - it < ASK_AGAIN_MILLIS } -> false
+                else -> null
+            }
+        }
+        if (known == false) return null
+        if (known == null) {
+            val supported = runCatching { statusSupported(call(manager, "isSensorSupported", type)?.toString()) }
+                .getOrNull() ?: return null
+            synchronized(supportedTypes) { if (supported) supportedTypes += type else deniedAt[type] = now }
+            if (!supported) return null
+        }
         return latestValue(manager, type)
     }
 
@@ -209,7 +226,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         // A failed call is asked again at the next read; only an answer is kept.
         val status = runCatching { call(manager, "isSensorSupported", SENSOR_TYPE_CAR_SPEED)?.toString() }
             .getOrElse { return false }
-        val supported = status != null && status != "notavailable" && status != "error"
+        val supported = statusSupported(status)
         Log.i(TAG, "ECARX speed sensor $status")
         speedSupported = supported
         return supported
