@@ -129,8 +129,13 @@ internal class FceClusterOutput(private val writer: FcePropertyWriter) {
  * last known value of each is kept.
  */
 internal class FceNavigationState {
-    private var state: Int? = null
-    private var source: String? = null
+    /** Last RouteGuidanceState (0x01), null until one came. */
+    var state: Int? = null
+        private set
+
+    /** Last navigation source name (0x13), null until one came. */
+    var source: String? = null
+        private set
 
     val active: Boolean
         get() = when {

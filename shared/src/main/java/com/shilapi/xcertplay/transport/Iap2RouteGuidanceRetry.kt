@@ -30,16 +30,21 @@ internal class Iap2RouteGuidanceRetry(
     fun accept(messageId: Int, payload: ByteArray) {
         when (messageId) {
             BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE -> {
+                // A late maneuver of a route that has ended must not use up the next route's retry.
+                if (navigation.ended) return
                 settled = true
                 routeSince = null
             }
             BydHudRouteState.ROUTE_GUIDANCE_UPDATE -> {
                 navigation.accept(messageId, payload)
-                if (navigation.ended) {
-                    settled = false
-                    routeSince = null
-                } else if (!settled && routeSince == null) {
-                    routeSince = now()
+                when {
+                    navigation.ended -> {
+                        settled = false
+                        routeSince = null
+                    }
+                    // While the route is still loading or the phone is locating itself, no maneuver is due.
+                    navigation.state in NO_MANEUVER_YET -> routeSince = null
+                    !settled && routeSince == null -> routeSince = now()
                 }
             }
         }
@@ -55,7 +60,7 @@ internal class Iap2RouteGuidanceRetry(
         send(Iap2ControlMessages.startRouteGuidanceUpdates())
         onProgress(
             "iap2 tx=0x5203+0x5200 route guidance asked again: a route for ${waited / NANOS_PER_SECOND} s " +
-                "without a maneuver",
+                "without a maneuver, state=${navigation.state} source=${navigation.source}",
         )
     }
 
@@ -68,6 +73,9 @@ internal class Iap2RouteGuidanceRetry(
 
     companion object {
         const val DEFAULT_WAIT_NANOS = 20_000_000_000L
+
+        /** RouteGuidanceState Loading (3) and Locating (4). */
+        private val NO_MANEUVER_YET = setOf(3, 4)
         private const val NANOS_PER_SECOND = 1_000_000_000L
         private const val NANOS_PER_MILLI = 1_000_000L
     }

@@ -86,6 +86,31 @@ class Iap2RouteGuidanceRetryTest {
     }
 
     @Test
+    fun aLateManeuverOfAnEndedRouteKeepsTheNextRetry() {
+        retry.accept(0x5201, routeState(0))
+        retry.accept(0x5202, ByteArray(0))
+        clock = 10 * SECOND
+        retry.accept(0x5201, routeState(1))
+        tickAt(30)
+        assertEquals(2, sent.size)
+    }
+
+    @Test
+    fun loadingAndLocatingDoNotCount() {
+        retry.accept(0x5201, routeState(1))
+        clock = 15 * SECOND
+        retry.accept(0x5201, routeState(4))
+        tickAt(40)
+        assertTrue(sent.isEmpty())
+        retry.accept(0x5201, routeState(1))
+        tickAt(59)
+        assertTrue(sent.isEmpty())
+        tickAt(60)
+        assertEquals(2, sent.size)
+        assertTrue(progress.single().endsWith("state=1 source=null"))
+    }
+
+    @Test
     fun theWaitStartsAtTheFirstRouteUpdate() {
         clock = 10 * SECOND
         retry.accept(0x5201, ByteArray(0))
