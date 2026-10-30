@@ -85,9 +85,8 @@ class Iap2WiredControlClient(
                         }
                     }
                 }
-                val pollTimeout = routeGuidance.pollTimeout(vehicleStatus.pollTimeout(location.pollTimeout(remaining))).let {
-                    if (startAgainPending) minOf(it, START_AGAIN_POLL_MILLIS) else it
-                }
+                val pollTimeout = routeGuidance.pollTimeout(vehicleStatus.pollTimeout(location.pollTimeout(remaining)))
+                    .let { if (startAgainPending) minOf(it, START_AGAIN_POLL_MILLIS) else it }
                 val incoming = session.recv(pollTimeout)
                 if (incoming == null) {
                     if (session.isClosed) {

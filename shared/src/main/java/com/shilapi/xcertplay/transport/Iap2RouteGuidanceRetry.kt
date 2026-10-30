@@ -11,8 +11,10 @@ import com.shilapi.xcertplay.iap2.wire.Iap2Frame
  * 2GIS sends no maneuvers (0x5202) for a route started before CarPlay connected, only a few route
  * updates (0x5201), until the route is built again; every HUD and cluster output then stays empty.
  * After [waitNanos] with a route and without a maneuver, the route-guidance updates are stopped and
- * started again, once per control session. Whether 2GIS answers that is still to be seen in a car;
- * apps that send their maneuvers anyway never reach the retry.
+ * started again, once per route: a route counts from the first route update that does not say
+ * outright that there is none (whether 2GIS sends a state is not known) until one says so. Whether
+ * 2GIS answers the retry is still to be seen in a car; apps that send their maneuvers anyway never
+ * reach it.
  */
 internal class Iap2RouteGuidanceRetry(
     private val onProgress: (String) -> Unit,
@@ -21,18 +23,24 @@ internal class Iap2RouteGuidanceRetry(
 ) {
     private val navigation = FceNavigationState()
     private var routeSince: Long? = null
-    private var done = false
+
+    /** A maneuver came or the retry was sent for this route. */
+    private var settled = false
 
     fun accept(messageId: Int, payload: ByteArray) {
-        if (done) return
         when (messageId) {
             BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE -> {
-                done = true
+                settled = true
                 routeSince = null
             }
             BydHudRouteState.ROUTE_GUIDANCE_UPDATE -> {
                 navigation.accept(messageId, payload)
-                routeSince = if (navigation.ended) null else routeSince ?: now()
+                if (navigation.ended) {
+                    settled = false
+                    routeSince = null
+                } else if (!settled && routeSince == null) {
+                    routeSince = now()
+                }
             }
         }
     }
@@ -41,7 +49,7 @@ internal class Iap2RouteGuidanceRetry(
         val since = routeSince ?: return
         val waited = now() - since
         if (waited < waitNanos) return
-        done = true
+        settled = true
         routeSince = null
         send(Iap2ControlMessages.stopRouteGuidanceUpdates())
         send(Iap2ControlMessages.startRouteGuidanceUpdates())

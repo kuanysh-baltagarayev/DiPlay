@@ -54,6 +54,38 @@ class Iap2RouteGuidanceRetryTest {
     }
 
     @Test
+    fun aNewRouteWithoutManeuversIsAskedForAgainAfterAnEarlierRouteHadThem() {
+        retry.accept(0x5201, routeState(1))
+        retry.accept(0x5202, ByteArray(0))
+        clock = 60 * SECOND
+        retry.accept(0x5201, routeState(2))
+        retry.accept(0x5201, routeState(1))
+        tickAt(79)
+        assertTrue(sent.isEmpty())
+        tickAt(80)
+        assertEquals(listOf(0x5203, 0x5200), sent.map { it.messageId })
+    }
+
+    @Test
+    fun eachRouteGetsItsOwnRetry() {
+        retry.accept(0x5201, routeState(1))
+        tickAt(20)
+        retry.accept(0x5201, routeState(0))
+        retry.accept(0x5201, routeState(1))
+        tickAt(40)
+        assertEquals(4, sent.size)
+        assertEquals(2, progress.size)
+    }
+
+    @Test
+    fun anActiveStateCountsAlthoughTheSourceIsEmpty() {
+        // RouteGuidanceState 1 and an empty navigation source name (0x13).
+        retry.accept(0x5201, routeState(1) + byteArrayOf(0, 4, 0, 0x13))
+        tickAt(20)
+        assertEquals(2, sent.size)
+    }
+
+    @Test
     fun theWaitStartsAtTheFirstRouteUpdate() {
         clock = 10 * SECOND
         retry.accept(0x5201, ByteArray(0))
