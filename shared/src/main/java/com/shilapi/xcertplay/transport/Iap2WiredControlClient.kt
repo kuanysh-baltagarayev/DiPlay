@@ -62,6 +62,7 @@ class Iap2WiredControlClient(
         var startAgainDecided = false
         val location = Iap2LocationReporter(locationProvider, onProgress)
         val vehicleStatus = Iap2VehicleStatusReporter(vehicleStatusProvider, onProgress)
+        val routeGuidance = Iap2RouteGuidanceRetry(onProgress)
         try {
             while (true) {
                 val remaining = remainingMillis(deadlineNanos)
@@ -70,6 +71,7 @@ class Iap2WiredControlClient(
                 }
                 location.tick { send(it, deadlineNanos) }
                 vehicleStatus.tick { send(it, deadlineNanos) }
+                routeGuidance.tick { send(it, deadlineNanos) }
                 var startAgainPending = false
                 if (!startAgainDecided && stage == Iap2WiredControlStage.CARPLAY_START_SENT) {
                     when (startSessionAgain()) {
@@ -83,7 +85,7 @@ class Iap2WiredControlClient(
                         }
                     }
                 }
-                val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining)).let {
+                val pollTimeout = routeGuidance.pollTimeout(vehicleStatus.pollTimeout(location.pollTimeout(remaining))).let {
                     if (startAgainPending) minOf(it, START_AGAIN_POLL_MILLIS) else it
                 }
                 val incoming = session.recv(pollTimeout)
@@ -129,6 +131,7 @@ class Iap2WiredControlClient(
 
                     else -> {
                         rxLog.line(incoming.messageId)?.let(onProgress)
+                        routeGuidance.accept(incoming.messageId, incoming.payload)
                         onIncoming(incoming)
                         forwardedFrames++
                     }

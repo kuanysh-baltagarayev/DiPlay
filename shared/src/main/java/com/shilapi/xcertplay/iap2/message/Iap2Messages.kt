@@ -285,13 +285,22 @@ object Iap2ControlMessages {
             }
         }
 
-    fun subscriptions(): List<Iap2Frame> = listOf(
-        startNowPlayingUpdates(),
+    fun startRouteGuidanceUpdates(): Iap2Frame =
         Iap2Messages.build(Iap2Endpoints.START_ROUTE_GUIDANCE_UPDATES) {
             u16(0, 42)
             void(1)
             void(2)
-        },
+        }
+
+    /** Stops the updates of the display component that [startRouteGuidanceUpdates] asked for. */
+    fun stopRouteGuidanceUpdates(): Iap2Frame =
+        Iap2Messages.build(Iap2Endpoints.STOP_ROUTE_GUIDANCE_UPDATES) {
+            u16(0, 42)
+        }
+
+    fun subscriptions(): List<Iap2Frame> = listOf(
+        startNowPlayingUpdates(),
+        startRouteGuidanceUpdates(),
         Iap2Messages.build(Iap2Endpoints.START_POWER_UPDATES) {
             void(4)
             void(5)

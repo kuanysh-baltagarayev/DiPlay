@@ -76,6 +76,7 @@ class Iap2WirelessControlClient(
         var wirelessCarPlayAvailableSeen = false
         val location = Iap2LocationReporter(locationProvider, onProgress)
         val vehicleStatus = Iap2VehicleStatusReporter(vehicleStatusProvider, onProgress)
+        val routeGuidance = Iap2RouteGuidanceRetry(onProgress)
         try {
             while (true) {
                 val remaining = deadline.remainingMillis(keepAliveAfterDeadline)
@@ -93,7 +94,8 @@ class Iap2WirelessControlClient(
                 }
                 location.tick(::sendControl)
                 vehicleStatus.tick(::sendControl)
-                val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
+                routeGuidance.tick(::sendControl)
+                val pollTimeout = routeGuidance.pollTimeout(vehicleStatus.pollTimeout(location.pollTimeout(remaining)))
                 val incoming = session.recv(pollTimeout)
                 if (incoming == null) {
                     if (session.isClosed) {
@@ -220,6 +222,7 @@ class Iap2WirelessControlClient(
 
                     else -> {
                         rxLog.line(incoming.messageId)?.let(onProgress)
+                        routeGuidance.accept(incoming.messageId, incoming.payload)
                         onIncoming(incoming)
                         forwardedFrames++
                     }

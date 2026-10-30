@@ -140,6 +140,10 @@ internal class FceNavigationState {
             else -> source != null
         }
 
+    /** The iPhone said outright that there is no route: an empty source or an inactive state. */
+    val ended: Boolean
+        get() = source == "" || (state != null && state !in ACTIVE_STATES)
+
     fun accept(messageId: Int, payload: ByteArray) {
         if (messageId != BydHudRouteState.ROUTE_GUIDANCE_UPDATE || !validTlvs(payload)) return
         var offset = 0
