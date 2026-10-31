@@ -110,6 +110,7 @@ class CarPlayVpnService : VpnService() {
                 .establish()
                 ?: throw IOException("VpnService.establish returned null")
             tun = tunFd
+            tunnelOpen = true
 
             val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac) { error ->
                 onTransportError(generation, listener, error)
@@ -381,6 +382,7 @@ class CarPlayVpnService : VpnService() {
         bridge = null
         tun?.close()
         tun = null
+        tunnelOpen = false
     }
 
     companion object {
@@ -391,6 +393,13 @@ class CarPlayVpnService : VpnService() {
         private const val TUN_MTU = 1500
         private const val TUN_LOOKUP_ATTEMPTS = 10
         private const val TUN_LOOKUP_DELAY_MILLIS = 50L
+
+        /**
+         * Whether DiPlay's own VPN is up. Only one VPN runs at a time, so while this is false any VPN
+         * the system reports is someone else's, and DiPlay may have to go through it.
+         */
+        @Volatile var tunnelOpen = false
+            private set
 
         internal data class TunnelCandidate(val name: String, val index: Int, val addresses: List<InetAddress>)
 

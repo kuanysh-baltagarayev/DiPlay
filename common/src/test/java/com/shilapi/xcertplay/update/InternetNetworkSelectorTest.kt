@@ -14,4 +14,11 @@ class InternetNetworkSelectorTest {
         assertFalse(InternetNetworkSelector.isValidatedInternet(hasInternet = true, validated = false))
         assertTrue(InternetNetworkSelector.isValidatedInternet(hasInternet = true, validated = true))
     }
+
+    @Test fun skipsOnlyDiPlaysOwnVpn() {
+        assertFalse(InternetNetworkSelector.usable(validatedInternet = true, vpn = true, ownVpnOpen = true))
+        assertTrue(InternetNetworkSelector.usable(validatedInternet = true, vpn = true, ownVpnOpen = false))
+        assertTrue(InternetNetworkSelector.usable(validatedInternet = true, vpn = false, ownVpnOpen = true))
+        assertFalse(InternetNetworkSelector.usable(validatedInternet = false, vpn = false, ownVpnOpen = false))
+    }
 }
