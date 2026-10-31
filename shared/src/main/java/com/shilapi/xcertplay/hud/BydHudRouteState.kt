@@ -69,6 +69,9 @@ internal class BydHudRouteState(
 
     fun accept(messageId: Int, payload: ByteArray): BydHudRouteChange {
         if (!validTlvs(payload)) return BydHudRouteChange.NONE
+        // An end that came due before this message belongs to the old route: apply it before the new data
+        // is stored, or the first read after it would clear the new route too.
+        endIfDue()
         return when (messageId) {
             ROUTE_GUIDANCE_UPDATE -> parseRouteUpdate(payload)
             ROUTE_GUIDANCE_MANEUVER_UPDATE -> parseManeuverUpdate(payload)
@@ -127,9 +130,13 @@ internal class BydHudRouteState(
         holdingAcrossDrop = true
     }
 
-    private fun activeManeuver(): Maneuver? {
+    private fun endIfDue() {
         val ending = endingSinceNs
         if (ending != null && nanoTime() - ending >= endDelayNs) clear()
+    }
+
+    private fun activeManeuver(): Maneuver? {
+        endIfDue()
         if (!routeActive || activeIndex < 0) return null
         val updated = lastRouteUpdateNs ?: return null
         if (nanoTime() - updated >= staleRouteNs) return null
