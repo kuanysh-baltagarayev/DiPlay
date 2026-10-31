@@ -13,7 +13,7 @@ val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSET
 val carPackage = providers.environmentVariable("DIPLAY_CAR_PACKAGE").orNull == "1"
 
 // A car build published for over-the-air updates (DiPlay_builds/publish.sh): its build number goes into
-// the version (0.2.21-geely.N, versionCode 40000 + N), and the private repository it updates from and
+// the version (<versionName>-geely.N, versionCode <versionCode> * 1000 + N), and the private repository it updates from and
 // a read-only token for it go into the manifest. Ordinary builds keep the upstream update source.
 val buildNumber = providers.environmentVariable("DIPLAY_BUILD_NUMBER").orNull?.toInt()?.takeIf { carPackage }
 val updateRepo = providers.environmentVariable("DIPLAY_UPDATE_REPO").orNull.orEmpty().takeIf { carPackage }.orEmpty()
