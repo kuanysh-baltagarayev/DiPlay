@@ -42,7 +42,11 @@ internal object EcarxDim {
             val switched = runCatching {
                 val dimMenu = dimMenu(app)
                 Class.forName(DIM_MENU).getMethod("switchNaviMode", Int::class.javaPrimitiveType).invoke(dimMenu, mode)
-            }.onFailure { Log.w(TAG, "switchNaviMode($mode) failed", it) }.isSuccess
+            }.onFailure {
+                // The proxy may belong to a car service that has restarted: look it up again next time.
+                menu = null
+                Log.w(TAG, "switchNaviMode($mode) failed", it)
+            }.isSuccess
             main.postDelayed({ message(app) }, MESSAGE_DELAY_MILLIS)
             Log.i(TAG, "cluster ${if (show) "shows display 2" else "back to its stock view"}: naviMode $mode switched=$switched")
         }
@@ -51,7 +55,7 @@ internal object EcarxDim {
     /** The cluster's navigation mode, or null when it cannot be read. */
     fun naviMode(context: Context): Int? = runCatching {
         Class.forName(DIM_MENU).getMethod("getNaviMode").invoke(dimMenu(context.applicationContext ?: context)) as Int
-    }.getOrNull()
+    }.onFailure { menu = null }.getOrNull()
 
     private fun dimMenu(app: Context): Any = menu ?: run {
         val dimClass = Class.forName(DIM_INTERACTION)
