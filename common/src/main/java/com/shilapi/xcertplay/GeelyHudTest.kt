@@ -23,7 +23,8 @@ import androidx.core.content.ContextCompat
  * `am broadcast -a com.shilapi.xcertplay.GEELY_HUD_TEST -p com.shihab.diplay --ei x 0 --ei y 762
  * --ei w 728 --ei h 96 [--ei sec 120] [--ez on false]`: without `on` the window is shown (or moved);
  * `--ez on false` removes it. It removes itself after `sec` seconds (default 120): a bright
- * rectangle on the windshield must not stay while driving. Nothing is saved.
+ * rectangle on the windshield must not stay while driving. Nothing is saved. Only `adb shell` (or root)
+ * may send it ([GeelyClusterMap.SHELL_ONLY]).
  */
 internal object GeelyHudTest {
     private const val TAG = "DiPlay-GeelyHudTest"
@@ -46,7 +47,8 @@ internal object GeelyHudTest {
                 main.post { handle(intent) }
             }
         }
-        ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION), ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION), GeelyClusterMap.SHELL_ONLY, null,
+            ContextCompat.RECEIVER_EXPORTED)
     }
 
     private fun handle(intent: Intent) {

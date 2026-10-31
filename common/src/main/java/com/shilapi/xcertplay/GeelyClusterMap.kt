@@ -75,6 +75,12 @@ internal object GeelyClusterMap {
      * edge kept clear) tune its view. They apply at the next connection.
      */
     const val ACTION_HUD_MODE = "com.shilapi.xcertplay.GEELY_HUD_MAP_MODE"
+    /**
+     * The permission a sender of the setup broadcasts ([ACTION_LAYOUT], [ACTION_HUD_MODE], the HUD test and
+     * info windows) must hold. `adb shell` and root have it, apps cannot get it, so no other app on the head
+     * unit can draw on the windshield or move the map. SRC's show, hide and toggle stay open for MConfig+.
+     */
+    const val SHELL_ONLY = android.Manifest.permission.DUMP
     /** The part of display 2 that reaches the cluster. */
     const val CANVAS_WIDTH = 1920
     const val CANVAS_HEIGHT = 720
@@ -144,7 +150,7 @@ internal object GeelyClusterMap {
     data class Layout(val x: Int, val y: Int, val width: Int, val height: Int) {
         companion object {
             val DEFAULT = Layout(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-            // The broadcast is open to every app: a window too small to read must not be saved.
+            // A typo in the broadcast must not save a window too small to read.
             internal const val MIN_WIDTH = 320
             internal const val MIN_HEIGHT = 120
 
@@ -246,14 +252,17 @@ internal object GeelyClusterMap {
                 }
             }
         }
-        val filter = IntentFilter().apply {
+        val keys = IntentFilter().apply {
             addAction(ACTION_SHOW)
             addAction(ACTION_HIDE)
             addAction(ACTION_TOGGLE)
+        }
+        ContextCompat.registerReceiver(app, receiver, keys, ContextCompat.RECEIVER_EXPORTED)
+        val setup = IntentFilter().apply {
             addAction(ACTION_LAYOUT)
             addAction(ACTION_HUD_MODE)
         }
-        ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(app, receiver, setup, SHELL_ONLY, null, ContextCompat.RECEIVER_EXPORTED)
         runCatching {
             app.contentResolver.registerContentObserver(Settings.Global.getUriFor(NAVI_MODE_SETTING), false,
                 object : ContentObserver(main) {

@@ -30,7 +30,7 @@ import kotlin.math.roundToInt
  * `am broadcast -a com.shilapi.xcertplay.GEELY_HUD_INFO -p com.shihab.diplay [--ez on false]
  * [--ei x 452 --ei y 828 --ei w 260 --ei h 78] [--ei rs 1]` switches it off or moves it (display 2
  * pixels); `rs` is the divisor that turns the range sensor's raw value into km (1 until checked against
- * the cluster). The change shows at once.
+ * the cluster). The change shows at once. Only `adb shell` (or root) may send it ([GeelyClusterMap.SHELL_ONLY]).
  */
 internal object GeelyHudInfo {
     private const val TAG = "DiPlay-GeelyHudInfo"
@@ -82,7 +82,8 @@ internal object GeelyHudInfo {
                 if (intent.action == ACTION) main.post { configure(intent) }
             }
         }
-        ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION), ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION), GeelyClusterMap.SHELL_ONLY, null,
+            ContextCompat.RECEIVER_EXPORTED)
         worker.post(tick)
     }
 
