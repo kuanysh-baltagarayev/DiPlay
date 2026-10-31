@@ -413,9 +413,19 @@ internal object GeelyClusterMap {
         if (!GeelyHudBroadcasts.installed(context) || !EcarxDim.present()) return false
         val displays = (context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)?.displays
             ?: return false
-        displays.none { it.name?.contains(BYD_CLUSTER_DISPLAY) == true } &&
-            displays.any { it.displayId == DISPLAY_ID }
+        val canvas = displays.firstOrNull { it.displayId == DISPLAY_ID } ?: return false
+        displays.none { it.name?.contains(BYD_CLUSTER_DISPLAY) == true } && !ownCluster(canvas)
     }.getOrDefault(false)
+
+    /**
+     * On the Geely FX11 display 2 is the 1920x720 cluster itself, and [GeelyClusterDisplay]'s presentation
+     * already shows the map there; this window and its stream rules would hide it.
+     */
+    private fun ownCluster(display: Display): Boolean {
+        if (!GeelyClusterDisplay.supported()) return false
+        val size = ClusterMapPresentation.sizeOf(display)
+        return GeelyClusterDisplay.matches(display, size.x, size.y)
+    }
 
     private fun onConnected(next: Boolean) {
         connected = next
