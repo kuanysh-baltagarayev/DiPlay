@@ -863,12 +863,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             registerReceiver(bluetoothOnReceiver, bluetoothState)
         }
         NavigationWidgetUpdater.attach(applicationContext)
-        GeelyHudBroadcasts.attach(applicationContext)
-        GeelyClusterMap.attach(applicationContext)
-        if (GeelyClusterMap.available(applicationContext)) {
-            GeelyHudTest.attach(applicationContext)
-            GeelyHudInfo.attach(applicationContext)
-        }
+        attachGeelyOutputs()
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
         MapMirrors.sink = mirrorSink
@@ -5668,9 +5663,25 @@ open class CarPlayHostActivity : ComponentActivity() {
         return true
     }
 
+    /**
+     * The Geely HUD and cluster outputs attach once their head unit is seen. At boot display 2, the ECARX
+     * classes or MConfig+ may not be up yet when this screen is created, so each connection asks again;
+     * an output that is attached stays attached.
+     */
+    private fun attachGeelyOutputs() {
+        GeelyHudBroadcasts.attach(applicationContext)
+        GeelyClusterMap.attach(applicationContext)
+        if (GeelyClusterMap.available(applicationContext)) {
+            GeelyHudTest.attach(applicationContext)
+            GeelyHudInfo.attach(applicationContext)
+        }
+    }
+
     private fun startCarPlay(size: DisplaySize) {
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
+        // Before the session's config, which asks for the Geely stream when the head unit is seen.
+        attachGeelyOutputs()
         val controllerGeneration = restartGeneration
         // Settings → Connection can change the target while this screen stays open (#696).
         mfiTarget = AirPlayPersistence.loadMfiTarget(this)
