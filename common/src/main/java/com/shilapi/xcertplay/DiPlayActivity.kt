@@ -2006,7 +2006,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     markReconnectNeeded()
                 }
             }
-            if (EcarxWheelSpeed.present() && GeelyClusterMap.hudMode(this)) {
+            // Only where the HUD map can open: MConfig+, the DIM SDK and display 2.
+            if (GeelyClusterMap.available(this) && GeelyClusterMap.hudMode(this)) {
                 toggle(card, getString(R.string.settings_hud_map_auto),
                     getString(R.string.settings_hud_map_auto_description),
                     GeelyClusterMap.hudAuto(this)) { GeelyClusterMap.saveHudAuto(this, it) }
