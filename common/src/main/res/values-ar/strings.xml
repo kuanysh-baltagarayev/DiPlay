@@ -1008,5 +1008,5 @@
     <string name="hud_info_ice">جليد</string>
     <string name="hud_info_km">كم</string>
     <string name="settings_hud_map_auto">خريطة HUD مع الملاحة</string>
-    <string name="settings_hud_map_auto_description">تفتح خريطة CarPlay الصغيرة على شاشة HUD تلقائيا عندما يبدأ iPhone بالتوجيه على مسار، وتغلقها عند نهايته. معطلة افتراضيا: عندها تفتح الخريطة وتغلق بزر (مفتاح SRC في MConfig+ يرسل GEELY_CLUSTER_MAP_TOGGLE إلى com.shihab.diplay). يسري فورا.</string>
+    <string name="settings_hud_map_auto_description">تفتح خريطة CarPlay الصغيرة على شاشة HUD تلقائيا عندما يبدأ iPhone بالتوجيه على مسار، وتغلقها عند نهايته. معطلة افتراضيا: عندها تفتح الخريطة وتغلق بزر (مفتاح SRC في MConfig+ يرسل com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE إلى com.shihab.diplay). يسري فورا.</string>
 </resources>

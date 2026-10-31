@@ -959,5 +959,5 @@
     <string name="hud_info_ice">HIELO</string>
     <string name="hud_info_km">km</string>
     <string name="settings_hud_map_auto">Mapa en el HUD con la navegación</string>
-    <string name="settings_hud_map_auto_description">Abre solo el pequeño mapa de CarPlay en el HUD del parabrisas cuando el iPhone empieza a guiar una ruta y lo cierra al terminar. Desactivado por defecto: entonces el mapa se abre y se cierra con un botón (tecla SRC de MConfig+ que envía GEELY_CLUSTER_MAP_TOGGLE a com.shihab.diplay). Se aplica al instante.</string>
+    <string name="settings_hud_map_auto_description">Abre solo el pequeño mapa de CarPlay en el HUD del parabrisas cuando el iPhone empieza a guiar una ruta y lo cierra al terminar. Desactivado por defecto: entonces el mapa se abre y se cierra con un botón (tecla SRC de MConfig+ que envía com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE a com.shihab.diplay). Se aplica al instante.</string>
 </resources>
