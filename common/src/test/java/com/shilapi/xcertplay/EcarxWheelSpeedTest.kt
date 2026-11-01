@@ -42,11 +42,12 @@ class EcarxWheelSpeedTest {
         assertFalse(ecarxStillDenied(1_000L, 31_000L))
     }
 
-    @Test fun theSensorManagerIsLookedUpAgainOnlyAfterRepeatedFailuresOfAnOldOne() {
+    @Test fun theSensorManagerIsLookedUpAgainOnlyWhenNothingHasAnsweredThroughItForHalfAMinute() {
         assertFalse(ecarxReconnectDue(2, 60_000L)) // one or two failed reads may be a glitch
         assertTrue(ecarxReconnectDue(3, 60_000L))
         assertTrue(ecarxReconnectDue(10, 30_000L))
-        // A manager found moments ago is kept, so a sensor that always throws does not rebind every second.
+        // Something answered moments ago (or the manager is new): the service is up, a sensor that
+        // keeps throwing does not make DiPlay rebind.
         assertFalse(ecarxReconnectDue(10, 29_999L))
     }
 }

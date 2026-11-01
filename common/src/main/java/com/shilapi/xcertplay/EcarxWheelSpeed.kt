@@ -52,7 +52,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     @Volatile private var speedDeniedAt: Long? = null
     private var speedStatusLogged: String? = null // poll thread
     @Volatile private var lastAttemptAt = 0L
-    @Volatile private var sensorFoundAt = 0L
+    @Volatile private var lastSuccessAt = 0L // a lookup or a call that answered
     private var failures = 0 // guarded by sensorLock: calls in a row that threw
     private var executor: ScheduledExecutorService? = null
     private val samples = ArrayList<VehicleSpeedSample>()
@@ -101,6 +101,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         gear = null
         reads = 0
         firstSampleLogged = false
+        speedDeniedAt = null // a new session asks again at once
         executor = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "diplay-ecarx-speed").apply { isDaemon = true }
         }.also { it.scheduleWithFixedDelay(::poll, 0, READ_MILLIS, TimeUnit.MILLISECONDS) }
@@ -164,9 +165,18 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         if (known == false) return null
         if (known == null) {
             val status = runCatching { call(manager, "isSensorSupported", type)?.toString() }
-            val supported = status.getOrNull().let(::statusSupported)
             Log.i(TAG, "sensor $type support: ${status.getOrNull() ?: status.exceptionOrNull()}")
-            synchronized(supportedTypes) { if (supported) supportedTypes += type else deniedAt[type] = now }
+            // A failed call is asked again at the next read; only an answer is kept, as for the speed.
+            if (status.isFailure) return null
+            val supported = statusSupported(status.getOrNull())
+            // An answer of a manager dropped meanwhile is not kept for the new one.
+            synchronized(supportedTypes) {
+                when {
+                    sensor !== manager -> Unit
+                    supported -> supportedTypes += type
+                    else -> deniedAt[type] = now
+                }
+            }
             if (!supported) return null
         }
         return latestValue(manager, type)
@@ -183,15 +193,20 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
         if (reads++ % GEAR_EVERY_READS == 0) {
             val event = runCatching { call(sensor, "getSensorEvent", SENSOR_TYPE_GEAR) as Int }.getOrNull()
             val next = event?.let(::gear)
-            val changed = synchronized(this) { (gear != next).also { gear = next } }
+            // Checked under the lock that failed() clears the readings with: nothing read through a
+            // manager dropped meanwhile is kept.
+            val changed = synchronized(this) { this.sensor === sensor && (gear != next).also { gear = next } }
             if (changed) Log.i(TAG, "gear $next (event $event)")
         }
-        if (!speedSupported(sensor)) return
+        // The gear read may have dropped this manager: the new one is asked, not this one.
+        if (this.sensor !== sensor) return
+        if (!askSpeedSupported(sensor)) return
         val before = SystemClock.elapsedRealtime()
         val raw = latestValue(sensor, SENSOR_TYPE_CAR_SPEED) ?: return
         val speed = metersPerSecond(raw) ?: return
         val sample = VehicleSpeedSample((before + SystemClock.elapsedRealtime()) / 2, speed)
         synchronized(this) {
+            if (this.sensor !== sensor) return
             if (samples.size == MAX_SAMPLES) samples.removeAt(0)
             samples += sample
         }
@@ -203,7 +218,8 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 
     /**
      * The ECARX sensor manager. The ECARX framework can come up after DiPlay at boot, so a failed
-     * lookup is retried, but at most every few seconds: the poll and the video gate both ask.
+     * lookup is retried, but at most every few seconds: the poll, the video gate and the HUD readout
+     * all ask, and each try goes through `Car.create`.
      */
     private fun sensor(): Any? = synchronized(sensorLock) { findSensor() }
 
@@ -219,7 +235,7 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
             Class.forName(ICAR).getMethod("getSensorManager").invoke(car)!!
         }.onSuccess {
             sensor = it
-            sensorFoundAt = now
+            lastSuccessAt = now
             failures = 0
         }.onFailure {
             if (!failureLogged) Log.w(TAG, "ECARX sensors unavailable, retrying", it)
@@ -228,12 +244,12 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     }
 
     /**
-     * Whether the speed sensor is supported. A yes holds for the process; a no is asked again after a
-     * while, as in [latest]: the framework may answer no while it is still coming up at boot. An
-     * unsupported sensor may read 0, and a false 0 would tell the iPhone the car stands while its GPS
-     * sees it moving. The gear does not depend on it.
+     * Whether the speed sensor is supported. A yes holds until the sensor manager is looked up again; a
+     * no is asked again after a while, as in [latest]: the framework may answer no while it is still
+     * coming up at boot. An unsupported sensor may read 0, and a false 0 would tell the iPhone the car
+     * stands while its GPS sees it moving. The gear does not depend on it.
      */
-    private fun speedSupported(manager: Any): Boolean {
+    private fun askSpeedSupported(manager: Any): Boolean {
         if (speedSupported) return true
         val now = SystemClock.elapsedRealtime()
         if (ecarxStillDenied(speedDeniedAt, now)) return false
@@ -246,13 +262,26 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
             speedStatusLogged = status
             Log.i(TAG, "ECARX speed sensor $status")
         }
-        if (supported) speedSupported = true else speedDeniedAt = now
-        return supported
+        // Under the lock failed() resets these with: an answer of a manager dropped meanwhile is not kept.
+        return synchronized(sensorLock) {
+            when {
+                sensor !== manager -> false
+                supported -> true.also { speedSupported = true }
+                else -> false.also { speedDeniedAt = now }
+            }
+        }
     }
 
     private fun call(sensor: Any, method: String, type: Int): Any? = try {
         Class.forName(SENSOR).getMethod(method, Int::class.javaPrimitiveType).invoke(sensor, type)
-            .also { synchronized(sensorLock) { if (this.sensor === sensor) failures = 0 } }
+            .also {
+                synchronized(sensorLock) {
+                    if (this.sensor === sensor) {
+                        failures = 0
+                        lastSuccessAt = SystemClock.elapsedRealtime()
+                    }
+                }
+            }
     } catch (failure: Exception) {
         failed(sensor, method, failure)
         throw failure
@@ -261,17 +290,29 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
     /**
      * The sensor manager is a proxy to the ECARX car service. When that service restarts, every call
      * through the old proxy throws for good; without a new lookup the speed, the gear and the HUD
-     * readout would stay empty until DiPlay restarts.
+     * readout would stay empty until DiPlay restarts. Only a manager through which nothing has answered
+     * for a while is dropped: one sensor that keeps throwing while another answers is no restart.
      */
     private fun failed(used: Any, method: String, failure: Exception) = synchronized(sensorLock) {
         if (sensor !== used) return@synchronized
         failures++
-        if (!ecarxReconnectDue(failures, SystemClock.elapsedRealtime() - sensorFoundAt)) return@synchronized
+        if (!ecarxReconnectDue(failures, SystemClock.elapsedRealtime() - lastSuccessAt)) return@synchronized
         Log.w(TAG, "ECARX sensor calls keep failing ($method: ${failure.cause ?: failure}); looking the sensor manager up again")
         sensor = null
         failures = 0
         lastAttemptAt = 0L
         failureLogged = false
+        // The new manager is asked again, and nothing read through the old one is sent with its readings.
+        speedSupported = false
+        speedDeniedAt = null
+        synchronized(supportedTypes) {
+            supportedTypes.clear()
+            deniedAt.clear()
+        }
+        synchronized(this) {
+            gear = null
+            samples.clear()
+        }
     }
 }
 
@@ -279,13 +320,16 @@ internal object EcarxWheelSpeed : VehicleSpeedSource {
 private const val ECARX_ASK_AGAIN_MILLIS = 30_000L
 /** Calls in a row that throw before the sensor manager is looked up again. */
 private const val ECARX_FAILURES_BEFORE_RECONNECT = 3
-/** A sensor manager is kept at least this long: a sensor that always throws must not make DiPlay rebind every second. */
+/** How long nothing must have answered through a sensor manager before it is looked up again. */
 private const val ECARX_RECONNECT_MIN_MILLIS = 30_000L
 
 /** Whether a sensor that answered no at [deniedAt] is still taken as unsupported at [now]. */
 internal fun ecarxStillDenied(deniedAt: Long?, now: Long): Boolean =
     deniedAt != null && now - deniedAt < ECARX_ASK_AGAIN_MILLIS
 
-/** Whether [failures] calls in a row through a manager found [sinceFoundMillis] ago call for a new lookup. */
-internal fun ecarxReconnectDue(failures: Int, sinceFoundMillis: Long): Boolean =
-    failures >= ECARX_FAILURES_BEFORE_RECONNECT && sinceFoundMillis >= ECARX_RECONNECT_MIN_MILLIS
+/**
+ * Whether [failures] calls in a row that threw, through a manager that last answered (or was found)
+ * [sinceAnswerMillis] ago, call for a new lookup.
+ */
+internal fun ecarxReconnectDue(failures: Int, sinceAnswerMillis: Long): Boolean =
+    failures >= ECARX_FAILURES_BEFORE_RECONNECT && sinceAnswerMillis >= ECARX_RECONNECT_MIN_MILLIS
