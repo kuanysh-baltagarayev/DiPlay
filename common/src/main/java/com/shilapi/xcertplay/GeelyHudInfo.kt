@@ -205,7 +205,7 @@ internal object GeelyHudInfo {
         window = null
     }
 
-    /** The lines, right-aligned from the top, in one colour each: white, amber for a warning, red for an alert. */
+    /** The lines, right-aligned and anchored at the bottom, in one colour each: white, amber for a warning, red for an alert. */
     private class HudInfoView(context: Context, var lines: List<HudInfoLine>) : View(context) {
         /** The system took the window away (its display went); a view not yet attached is not dead. */
         @Volatile var dead = false
@@ -226,12 +226,13 @@ internal object GeelyHudInfo {
         }
 
         override fun onDraw(canvas: Canvas) {
-            val rowHeight = height / 2f
-            paint.textSize = rowHeight * 0.8f
+            // The size of the navigation hints MConfig+ draws beside it (estimated from a photo of the windshield).
+            paint.textSize = HUD_TEXT_SIZE
             // Shrink the text until the longest line fits the window.
             val room = width - 24f
             val longest = lines.maxOfOrNull { paint.measureText(it.text) } ?: 0f
             if (longest > room && longest > 0f) paint.textSize = (paint.textSize * room / longest).coerceAtLeast(8f)
+            val rowHeight = paint.textSize * 1.3f
             // From the bottom, so the block does not jump when the second line comes or goes.
             lines.forEachIndexed { index, line ->
                 paint.color = when (line.severity) {
@@ -240,11 +241,14 @@ internal object GeelyHudInfo {
                     HudInfoSeverity.ALERT -> Color.rgb(255, 59, 48)
                 }
                 val fromBottom = lines.size - 1 - index
-                canvas.drawText(line.text, width - 16f, height - rowHeight * fromBottom - rowHeight * 0.2f, paint)
+                canvas.drawText(line.text, width - 16f, height - paint.descent() - rowHeight * fromBottom, paint)
             }
         }
     }
 }
+
+/** Text height in display-2 pixels, about that of MConfig+'s street and track lines on the HUD. */
+private const val HUD_TEXT_SIZE = 20f
 
 internal data class HudInfo(val temperatureCelsius: Float?, val rangeKm: Int?)
 
