@@ -3,7 +3,9 @@ package com.shilapi.xcertplay
 import com.shilapi.xcertplay.GeelyClusterMap.Layout
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeelyClusterMapLayoutTest {
@@ -32,5 +34,15 @@ class GeelyClusterMapLayoutTest {
         assertNull(cachedAvailability(null, 0, 0))
         assertEquals(false, cachedAvailability(false, 1_000, 5_000))
         assertNull(cachedAvailability(false, 1_000, 11_000))
+    }
+
+    @Test fun onlyMConfigPlus48Point3AndLaterAddTheirHudWindowAgain() {
+        assertFalse(mconfigVersionAtLeast("48.2", 48, 3))
+        assertTrue(mconfigVersionAtLeast("48.3", 48, 3))
+        assertTrue(mconfigVersionAtLeast("49", 48, 3))
+        assertTrue(mconfigVersionAtLeast(" 50.1-beta", 48, 3))
+        assertFalse(mconfigVersionAtLeast("47.9", 48, 3))
+        assertFalse(mconfigVersionAtLeast(null, 48, 3))
+        assertFalse(mconfigVersionAtLeast("test", 48, 3))
     }
 }

@@ -198,6 +198,16 @@ internal object GeelyHudInfo {
         }
     }
 
+    /** Opens the readout again so it lies over a HUD window another app added later (MConfig+ on HUD_SHOWN). */
+    fun raise() {
+        main.post {
+            // The same lines at once: a sensor read here would count as a tick and blink the readout.
+            val lines = view?.lines ?: return@post
+            hide()
+            render(lines)
+        }
+    }
+
     private fun hide() {
         val shown = view ?: return
         view = null

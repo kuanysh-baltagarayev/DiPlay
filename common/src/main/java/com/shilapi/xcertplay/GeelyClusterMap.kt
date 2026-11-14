@@ -55,8 +55,11 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * track lines. The iPhone is asked for a stream a few times that window's size (it takes a stream of the
  * window's own size for a tiny screen with huge controls), shown scaled down. SRC (MConfig+ action 38)
  * opens and closes the window, which also closes with the session; with `auto` it follows the route by
- * itself instead. The cluster's map mode is never touched (mSpeed may hold it) and nothing is announced
- * to MConfig+ or mSpeed. The cluster map itself is not available in this mode.
+ * itself instead. The cluster's map mode is never touched (mSpeed may hold it). An open window is announced
+ * with [ACTION_HUD_SHOWN] and a closed one with [ACTION_HUD_END], so MConfig+ 48.3+ sends HIDE at the
+ * next SRC press; mSpeed does not follow them. On HUD_SHOWN MConfig+ adds its own HUD window again, opaque
+ * and above ours, so DiPlay lays its HUD windows over it once more shortly after. The cluster map itself
+ * is not available in this mode.
  */
 internal object GeelyClusterMap {
     private const val TAG = "DiPlay-GeelyClusterMap"
@@ -64,6 +67,9 @@ internal object GeelyClusterMap {
     const val ACTION_HIDE = "hud.AAMAP_HIDE"
     const val ACTION_SHOWN = "hud.AAMAP_SHOWN"
     const val ACTION_END = "hud.AAMAP_END"
+    /** MConfig+ 48.3+: an app's map is on the HUD; it leaves the cluster alone and remembers the map is open. */
+    const val ACTION_HUD_SHOWN = "hud.AAMAP_HUD_SHOWN"
+    const val ACTION_HUD_END = "hud.AAMAP_HUD_END"
     const val ACTION_TOGGLE = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE"
     const val ACTION_LAYOUT = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_LAYOUT"
     /**
@@ -107,6 +113,8 @@ internal object GeelyClusterMap {
     private const val HUD_TICK_MILLIS = 1_000L
     /** After a failed attempt to open the HUD window, to log once and not every second. */
     private const val HUD_RETRY_MILLIS = 30_000L
+    /** MConfig+ adds its HUD window again 300 ms after HUD_SHOWN; ours go over it after that. */
+    private const val HUD_RAISE_DELAY_MILLIS = 800L
     /** Set while DiPlay holds the cluster in map mode, so a killed process is undone at the next start. */
     private const val KEY_HELD = "dim_held"
     /** ECARX names every extra display "HDMI", so the canvas that reaches the cluster is found by id. */
@@ -141,6 +149,7 @@ internal object GeelyClusterMap {
     private var card = TurnCard(null, 0, 0, 0, 0, false) // main thread
     private var ownSwitchAt = 0L // main thread, elapsedRealtime of DiPlay's last DIM switch
     private var ownsDim = false // main thread: DiPlay switched the cluster to map mode for this window
+    private var hudAnnounced = false // main thread: HUD_SHOWN was sent for the open HUD window
 
     /**
      * The map window on the cluster canvas, by default all of it. Width and height are multiples of 8,
@@ -358,8 +367,8 @@ internal object GeelyClusterMap {
         }
         wanted = true
         if (activeHud) {
-            // The HUD map is not announced: mSpeed would clear the cluster's area under a map that is not there.
-            if (root == null && !show()) wanted = false
+            // Already open (by the route or the toggle): MConfig+ only learns it now, so its next press hides.
+            if (root != null) announceHud() else if (!show()) wanted = false
             return
         }
         // Without the window (no overlay permission, no display 2) the iPhone must not keep
@@ -457,6 +466,7 @@ internal object GeelyClusterMap {
                 root = frame
                 ownsDim = false
                 Log.i(TAG, "HUD map window $rect shown on display $DISPLAY_ID")
+                announceHud()
                 return@runCatching
             }
             val cardView = ClusterTurnCardView(displayContext).apply { visibility = View.GONE }
@@ -481,6 +491,38 @@ internal object GeelyClusterMap {
                 if (ownsDim) "cluster switched to map mode" else "cluster already in map mode, left as it is")
         }.onFailure { Log.w(TAG, "cluster map window failed", it) }.isSuccess
     }
+
+    /** Tells MConfig+ the HUD map is open, then lays DiPlay's HUD windows over the one it adds again. */
+    private fun announceHud() {
+        hudAnnounced = true
+        send(ACTION_HUD_SHOWN)
+        main.removeCallbacks(raiseHud)
+        // Only MConfig+ 48.3 and later add their window again; with an older one a raise only restarts the stream.
+        if (context?.let { mconfigReaddsHudWindow(it) } == true) main.postDelayed(raiseHud, HUD_RAISE_DELAY_MILLIS)
+    }
+
+    /** The last window added lies on top, so the map window is added once more; the stream follows its new surface. */
+    private val raiseHud = Runnable {
+        val frame = root ?: return@Runnable
+        val manager = window ?: return@Runnable
+        if (!activeHud) return@Runnable
+        val params = frame.layoutParams as? WindowManager.LayoutParams ?: return@Runnable
+        runCatching { manager.removeViewImmediate(frame) }
+        val added = runCatching { manager.addView(frame, params) }
+            .onFailure { Log.w(TAG, "HUD map window could not be laid over MConfig+'s; closing it", it) }.isSuccess
+        if (!added) {
+            // The window is gone: say so, so SRC opens it again and MConfig+ does not wait for a HIDE.
+            wanted = false
+            control(false)
+            close()
+        }
+        GeelyHudInfo.raise()
+    }
+
+    private fun mconfigReaddsHudWindow(context: Context): Boolean = runCatching {
+        val name = context.packageManager.getPackageInfo(GeelyHudBroadcasts.MCONFIG_PACKAGE, 0).versionName
+        mconfigVersionAtLeast(name, 48, 3)
+    }.getOrDefault(false)
 
     internal fun windowParams(x: Int, y: Int, width: Int, height: Int, touchable: Boolean = true) =
         WindowManager.LayoutParams(width, height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -525,8 +567,13 @@ internal object GeelyClusterMap {
         turnCard = null
         val owned = ownsDim
         ownsDim = false
+        main.removeCallbacks(raiseHud)
+        val announced = hudAnnounced
+        hudAnnounced = false
+        if (frame != null && manager != null) runCatching { manager.removeViewImmediate(frame) }
+        // After the window is gone: MConfig+ may add its own HUD window again on END.
+        if (announced) send(ACTION_HUD_END)
         if (frame == null || manager == null) return
-        runCatching { manager.removeViewImmediate(frame) }
         context?.let { app ->
             if (restoreCluster && owned) {
                 ownSwitchAt = SystemClock.elapsedRealtime()
@@ -622,3 +669,11 @@ internal fun clampHudRect(x: Int, y: Int, width: Int, height: Int): HudRect {
  */
 internal fun hudStreamFactor(requested: Int, width: Int, height: Int): Int =
     minOf(requested, DISPLAY_WIDTH / width.coerceAtLeast(1), DISPLAY_HEIGHT / height.coerceAtLeast(1)).coerceAtLeast(1)
+
+/** MConfig+ names its versions "48.2", "48.3", "49"; its versionCode is always 1. */
+internal fun mconfigVersionAtLeast(versionName: String?, major: Int, minor: Int): Boolean {
+    val parts = versionName?.trim()?.split('.') ?: return false
+    val first = parts.getOrNull(0)?.toIntOrNull() ?: return false
+    val second = parts.getOrNull(1)?.takeWhile { it.isDigit() }?.toIntOrNull() ?: 0
+    return first > major || (first == major && second >= minor)
+}
