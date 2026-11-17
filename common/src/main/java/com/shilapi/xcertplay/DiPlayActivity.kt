@@ -2006,7 +2006,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     markReconnectNeeded()
                 }
             }
-            // Only where the HUD map can open: MConfig+, the DIM SDK and display 2.
+            // Only where the map can open: the DIM SDK and display 2.
+            if (GeelyClusterMap.available(this)) {
+                toggle(card, getString(R.string.settings_hud_map_mode),
+                    getString(R.string.settings_hud_map_mode_description),
+                    GeelyClusterMap.hudMode(this)) {
+                    GeelyClusterMap.saveHudMode(this, it)
+                    markReconnectNeeded()
+                    render()
+                }
+            }
             if (GeelyClusterMap.available(this) && GeelyClusterMap.hudMode(this)) {
                 toggle(card, getString(R.string.settings_hud_map_auto),
                     getString(R.string.settings_hud_map_auto_description),

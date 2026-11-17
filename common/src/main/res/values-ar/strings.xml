@@ -1009,4 +1009,6 @@
     <string name="hud_info_km">كم</string>
     <string name="settings_hud_map_auto">خريطة HUD مع الملاحة</string>
     <string name="settings_hud_map_auto_description">تفتح خريطة CarPlay الصغيرة على شاشة HUD تلقائيا عندما يبدأ iPhone بالتوجيه على مسار، وتغلقها عند نهايته. معطلة افتراضيا: عندها تفتح الخريطة وتغلق بزر (مفتاح SRC في MConfig+ يرسل com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE إلى com.shihab.diplay). يسري فورا.</string>
+    <string name="settings_hud_map_mode">الخريطة على HUD بدلاً من لوحة العدادات</string>
+    <string name="settings_hud_map_mode_description">يفتح زر SRC (إجراء MConfig+ رقم 38) خريطة CarPlay على HUD الزجاج الأمامي في نافذة صغيرة بدلاً من الخريطة بعرض كامل على لوحة العدادات. معطّل افتراضياً: تُفتح الخريطة على لوحة العدادات. يُطبَّق عند الاتصال التالي.</string>
 </resources>

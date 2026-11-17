@@ -1048,4 +1048,6 @@
     <string name="hud_info_km">km</string>
     <string name="settings_hud_map_auto">Navigasyonla HUD haritası</string>
     <string name="settings_hud_map_auto_description">iPhone bir rotada yönlendirmeye başlayınca ön cam HUD üzerindeki küçük CarPlay haritasını kendiliğinden açar, rota bitince kapatır. Varsayılan olarak kapalı: harita bir düğmeyle açılıp kapatılır (MConfig+ SRC tuşu, com.shihab.diplay için com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE gönderir). Hemen uygulanır.</string>
+    <string name="settings_hud_map_mode">Gösterge yerine HUD\'da harita</string>
+    <string name="settings_hud_map_mode_description">SRC tuşu (MConfig+, eylem 38) CarPlay haritasını gösterge panelinde tam genişlikte değil, ön cam HUD\'unda küçük bir pencerede açar. Varsayılan olarak kapalıdır: harita gösterge panelinde açılır. Sonraki bağlantıda uygulanır.</string>
 </resources>

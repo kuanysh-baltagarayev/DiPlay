@@ -960,4 +960,6 @@
     <string name="hud_info_km">km</string>
     <string name="settings_hud_map_auto">Mapa en el HUD con la navegación</string>
     <string name="settings_hud_map_auto_description">Abre solo el pequeño mapa de CarPlay en el HUD del parabrisas cuando el iPhone empieza a guiar una ruta y lo cierra al terminar. Desactivado por defecto: entonces el mapa se abre y se cierra con un botón (tecla SRC de MConfig+ que envía com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE a com.shihab.diplay). Se aplica al instante.</string>
+    <string name="settings_hud_map_mode">Mapa en el HUD en lugar del cuadro</string>
+    <string name="settings_hud_map_mode_description">La tecla SRC (MConfig+, acción 38) abre el mapa de CarPlay en el HUD del parabrisas, en una ventana pequeña, en lugar del mapa a todo el ancho del cuadro de instrumentos. Desactivado por defecto: el mapa se abre en el cuadro. Se aplica en la siguiente conexión.</string>
 </resources>

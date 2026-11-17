@@ -50,7 +50,7 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  * is asked not to draw the cluster map (stopUI). [ACTION_LAYOUT] moves or resizes the window (extras x, y, w, h);
  * the stream follows at the next connection.
  *
- * HUD mode (on by default, [ACTION_HUD_MODE]) uses the same stream for a small map in the free band of the
+ * HUD mode (off by default; the Settings switch or [ACTION_HUD_MODE]) uses the same stream for a small map in the free band of the
  * windshield HUD instead: below the cluster's top 1920x720 on display 2, between MConfig+'s street and
  * track lines. The iPhone is asked for a stream a few times that window's size (it takes a stream of the
  * window's own size for a tiny screen with huge controls), shown scaled down. SRC (MConfig+ action 38)
@@ -73,7 +73,7 @@ internal object GeelyClusterMap {
     const val ACTION_TOGGLE = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_TOGGLE"
     const val ACTION_LAYOUT = "com.shilapi.xcertplay.GEELY_CLUSTER_MAP_LAYOUT"
     /**
-     * `--ez on` (default true) turns the HUD map on or off; `--ez auto` (default false) opens the window by
+     * `--ez on` turns the HUD map on or off (left out: the saved choice, off until set); `--ez auto` (default false) opens the window by
      * itself while a route is guided instead of by SRC; `--ei x y w h` moves it (display 2 pixels).
      * The iPhone draws a stream `k` times the window (default 4: it takes a 192x96 display for a tiny
      * screen with huge controls), shown scaled down in the window; `--es content map|instruments`,
@@ -185,7 +185,12 @@ internal object GeelyClusterMap {
 
     /** Whether the stream and window are the HUD's small map rather than the cluster's. */
     fun hudMode(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, true)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HUD_MODE, false)
+
+    /** Saves the setting; the stream and window follow it at the next connection. */
+    fun saveHudMode(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HUD_MODE, on).apply()
+    }
 
     /** Whether the HUD map opens by itself while a route is guided (off by default). */
     fun hudAuto(context: Context): Boolean =
