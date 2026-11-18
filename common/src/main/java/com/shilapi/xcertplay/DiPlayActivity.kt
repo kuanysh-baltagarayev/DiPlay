@@ -3664,6 +3664,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 labelFactory = { label(it, 15, MUTED) }, buttonFactory = { title, click -> button(title, false, click) })
                 .also { hotspotJoinControls = it }
             parent.addView(join.build())
+            // ECARX keeps the car's Wi-Fi client on beside its hotspot, so the same pause applies there (#755).
+            if (EcarxWheelSpeed.present()) {
+                toggle(parent, getString(R.string.settings_wifi_direct_scan_pause),
+                    getString(R.string.settings_car_hotspot_scan_pause_description),
+                    AirPlayPersistence.loadWifiDirectScanPause(this)) {
+                    AirPlayPersistence.saveWifiDirectScanPause(this, it)
+                    markReconnectNeeded()
+                }
+            }
         } else if (mode == WirelessHotspotMode.EXISTING_WIFI) {
             parent.addView(label(getString(R.string.existing_wifi_instructions), 16, MUTED))
             parent.addView(button(getString(R.string.open_car_wi_fi_settings), false) { openCarClientWifiSettings() }, matchButton(12, 60))

@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit
  * Wi-Fi Direct needs the car's Wi-Fi client switched on. While that client is not joined to a
  * network, BYD firmware searches every band every 10 s (seen on DiLink 3, 4 and 5). The single radio
  * leaves the CarPlay channel for each search, and the iPhone's audio packets sent meanwhile are lost,
- * so music and voice stutter on a 10 s rhythm. The built-in car hotspot runs with the client off and
- * is not affected, and Same LAN needs the search, so only Wi-Fi Direct sessions pause it.
+ * so music and voice stutter on a 10 s rhythm. The built-in car hotspot usually runs with the client off
+ * and is not affected, except on head units that keep it on beside the hotspot (see [eligible]). Same
+ * LAN needs the search, so it never pauses it.
  *
  * Android offers apps no way to do this. Through the approved local adb shell, [WifiScanPauseMain]
  * runs as the shell user and turns off the framework's automatic joining, which stops these scans:
@@ -58,8 +59,15 @@ internal class WifiScanPause(
         /** app_process start-up on a slow head unit plus the helper's own deadline. */
         internal const val HELPER_TIMEOUT_MS = 15_000
 
-        fun eligible(backend: WirelessHotspotBackend, sdk: Int = Build.VERSION.SDK_INT): Boolean =
-            backend == WirelessHotspotBackend.WIFI_P2P && sdk >= Build.VERSION_CODES.N_MR1
+        /**
+         * [clientBesideHotspot]: the head unit keeps its Wi-Fi client on next to the car hotspot. The Geely/ECARX
+         * KX11 does, and its search every 30 s cost a 0.4 s burst of music about once a minute (2026-11-18).
+         */
+        fun eligible(backend: WirelessHotspotBackend, sdk: Int = Build.VERSION.SDK_INT,
+            clientBesideHotspot: Boolean = false): Boolean =
+            (backend == WirelessHotspotBackend.WIFI_P2P ||
+                (clientBesideHotspot && backend == WirelessHotspotBackend.MANUAL_HOTSPOT)) &&
+                sdk >= Build.VERSION_CODES.N_MR1
 
         fun restoreIfNeeded(context: Context) = ProcessWifiScanPause.recover(context.applicationContext)
 

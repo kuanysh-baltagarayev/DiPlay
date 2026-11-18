@@ -77,6 +77,11 @@ class CarPlayRuntimeConfig(
      * Geely/ECARX KX11 the reply to the iPhone's link-local IPv6 connection had no route (2026-11-18).
      */
     val wirelessIpv4Only: Boolean = false,
+    /**
+     * The head unit keeps its Wi-Fi client on beside the car hotspot, so its network search is paused
+     * there as for Wi-Fi Direct ([com.shilapi.xcertplay.network.WifiScanPause.eligible]).
+     */
+    val wifiClientBesideHotspot: Boolean = false,
 ) {
     init {
         require(iphoneDevices.all { it.vendorId == APPLE_VENDOR_ID }) {

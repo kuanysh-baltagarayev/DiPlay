@@ -2611,7 +2611,7 @@ class CarPlayController(
     // close() sets [closed] under this lock, so a lease is either taken first and released by
     // close, or never taken.
     private fun pauseWifiScans(backend: WirelessHotspotBackend) = synchronized(wirelessResourceLock) {
-        if (closed || !WifiScanPause.eligible(backend)) return@synchronized
+        if (closed || !WifiScanPause.eligible(backend, clientBesideHotspot = config.wifiClientBesideHotspot)) return@synchronized
         // Settings → Connection lets a driver keep the car's automatic joining, e.g. for the phone's hotspot (#755).
         if (!appContext.getSharedPreferences("xcertplay_airplay", android.content.Context.MODE_PRIVATE)
                 .getBoolean("wifi_direct_scan_pause", true)) {

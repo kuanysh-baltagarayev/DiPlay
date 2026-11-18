@@ -231,6 +231,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         existingWifiPassphrase = existingWifiPassphrase,
         existingWifiInterface = existingWifiInterface.trim().takeIf { it.isNotEmpty() },
         wirelessIpv4Only = EcarxWheelSpeed.present(),
+        wifiClientBesideHotspot = EcarxWheelSpeed.present(),
         locationReportingEnabled = locationReportingEnabled,
         availableCurrentMilliAmps = AirPlayPersistence.loadUsbChargingCurrent(this).milliAmps,
     )
