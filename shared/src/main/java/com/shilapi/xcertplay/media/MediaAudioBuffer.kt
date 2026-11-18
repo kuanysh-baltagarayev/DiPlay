@@ -26,14 +26,30 @@ object MediaAudioBuffer {
 
     data class Plan(val trackBufferBytes: Int, val startBytes: Int)
 
-    /** AudioTrack capacity and the amount to queue before play() for one output stream. */
-    fun plan(isMedia: Boolean, sampleRate: Int, channels: Int, minBufferBytes: Int, mediaMillis: Int): Plan {
+    /**
+     * Over Wi-Fi the iPhone sent call audio in bursts about 60 ms apart (Geely KX11, car hotspot, 2026-11-18),
+     * and the low-latency start level (about 40 ms) ran dry after each burst: WhatsApp calls broke up.
+     */
+    const val WIRELESS_VOICE_MILLIS = 120
+
+    /**
+     * AudioTrack capacity and the amount to queue before play() for one output stream. [voiceMillis] above
+     * zero gives calls, Siri and prompts at least that much before they start, with the same headroom.
+     */
+    fun plan(isMedia: Boolean, sampleRate: Int, channels: Int, minBufferBytes: Int, mediaMillis: Int,
+        voiceMillis: Int = 0): Plan {
         val lowLatency = Plan(
             trackBufferBytes = maxOf(minBufferBytes * 4, MIN_TRACK_BUFFER_BYTES),
             startBytes = maxOf(minBufferBytes, MIN_START_BUFFER_BYTES),
         )
-        if (!isMedia) return lowLatency
         val bytesPerSecond = sampleRate.toLong() * channels.coerceIn(1, 2) * 2
+        if (!isMedia) {
+            if (voiceMillis <= 0) return lowLatency
+            return Plan(
+                trackBufferBytes = maxOf((bytesPerSecond * (voiceMillis + HEADROOM_MILLIS) / 1000).toInt(), lowLatency.trackBufferBytes),
+                startBytes = maxOf((bytesPerSecond * voiceMillis / 1000).toInt(), lowLatency.startBytes),
+            )
+        }
         val start = (bytesPerSecond * sanitize(mediaMillis) / 1000).toInt()
         val capacity = (bytesPerSecond * (sanitize(mediaMillis) + HEADROOM_MILLIS) / 1000).toInt()
         return Plan(

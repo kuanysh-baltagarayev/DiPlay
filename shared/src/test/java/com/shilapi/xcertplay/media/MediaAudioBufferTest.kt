@@ -33,6 +33,22 @@ class MediaAudioBufferTest {
     }
 
     @Test
+    fun `wireless calls start with the voice delay plus headroom`() {
+        // 48 kHz mono call: 96 bytes per ms.
+        val plan = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 3_840, mediaMillis = 1000,
+            voiceMillis = MediaAudioBuffer.WIRELESS_VOICE_MILLIS)
+        assertEquals(11_520, plan.startBytes)
+        assertEquals(30_720, plan.trackBufferBytes)
+    }
+
+    @Test
+    fun `the voice delay never undercuts the device minimum`() {
+        val plan = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 20_000, mediaMillis = 300, voiceMillis = 120)
+        assertEquals(20_000, plan.startBytes)
+        assertEquals(80_000, plan.trackBufferBytes)
+    }
+
+    @Test
     fun `wired presets step by 50 ms up to 200 ms, then by 100 ms up to 1000 ms`() {
         assertEquals(listOf(50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000), MediaAudioBuffer.wiredPresets)
         assertEquals(MediaAudioBuffer.DEFAULT_MILLIS, MediaAudioBuffer.wiredPresets[4])

@@ -72,6 +72,11 @@ class CarPlayRuntimeConfig(
     val existingWifiPassphrase: String = "",
     /** Interface override for units whose station LAN runs on an interface Android does not report as Wi-Fi, e.g. a USB NIC on eth1. */
     val existingWifiInterface: String? = null,
+    /**
+     * Publish only the hotspot's IPv4 address and never move to IPv6 after a failed attempt. On the
+     * Geely/ECARX KX11 the reply to the iPhone's link-local IPv6 connection had no route (2026-11-18).
+     */
+    val wirelessIpv4Only: Boolean = false,
 ) {
     init {
         require(iphoneDevices.all { it.vendorId == APPLE_VENDOR_ID }) {

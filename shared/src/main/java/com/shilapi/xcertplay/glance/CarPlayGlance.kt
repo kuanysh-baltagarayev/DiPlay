@@ -55,7 +55,9 @@ object CarPlayGlance {
     private var loggedLanes: List<LaneGuidanceLane>? = null
 
     /** Told when a CarPlay session starts or ends. */
-    @Volatile var connectionListener: ((Boolean) -> Unit)? = null
+    private val connectionListeners = java.util.concurrent.CopyOnWriteArrayList<(Boolean) -> Unit>()
+
+    fun addConnectionListener(listener: (Boolean) -> Unit) { connectionListeners.add(listener) }
 
     /** Refresh time-dependent guidance even when no new metadata frame has arrived. */
     fun snapshot(): Snapshot {
@@ -102,7 +104,10 @@ object CarPlayGlance {
             publishLocked()
         }
         changed?.let { listener?.invoke(it) }
-        connectionListener?.invoke(next)
+        // One listener that throws must not keep the others from hearing of the session.
+        connectionListeners.forEach { listener ->
+            runCatching { listener(next) }.onFailure { android.util.Log.w(TAG, "connection listener failed", it) }
+        }
     }
 
     /**

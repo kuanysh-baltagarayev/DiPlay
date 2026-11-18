@@ -253,7 +253,7 @@ internal object GeelyClusterMap {
         context = app
         releaseStale(app)
         BydNavigationOutputs.clusterUiFilter = { requested -> requested && wanted }
-        CarPlayGlance.connectionListener = { next -> main.post { onConnected(next) } }
+        CarPlayGlance.addConnectionListener { next -> main.post { onConnected(next) } }
         MapMirrors.addStreamListener { active -> if (active && !wanted) control(false) }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {

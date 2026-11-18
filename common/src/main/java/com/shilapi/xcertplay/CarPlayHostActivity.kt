@@ -230,6 +230,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         existingWifiSsid = existingWifiSsid,
         existingWifiPassphrase = existingWifiPassphrase,
         existingWifiInterface = existingWifiInterface.trim().takeIf { it.isNotEmpty() },
+        wirelessIpv4Only = EcarxWheelSpeed.present(),
         locationReportingEnabled = locationReportingEnabled,
         availableCurrentMilliAmps = AirPlayPersistence.loadUsbChargingCurrent(this).milliAmps,
     )
@@ -5359,6 +5360,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 onScreenStreamStateChanged(controllerGeneration, type, active)
             },
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this, wireless = wirelessEnabled),
+            voiceBufferMillis = if (wirelessEnabled) com.shilapi.xcertplay.media.MediaAudioBuffer.WIRELESS_VOICE_MILLIS else 0,
             onAudioDiagnostic = { message ->
                 if (message.startsWith("Microphone: ")) {
                     AsyncDiagnosticLog.append(diagnosticLog, message)
@@ -5674,6 +5676,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (GeelyClusterMap.available(applicationContext)) {
             GeelyHudTest.attach(applicationContext)
             GeelyHudInfo.attach(applicationContext)
+            GeelyBluetoothMusic.attach(applicationContext)
         }
     }
 
@@ -5694,7 +5697,14 @@ open class CarPlayHostActivity : ComponentActivity() {
         } else {
             size
         }
-        val airPlayConfig = createAirPlayConfig(effectiveSize)
+        val airPlayConfig = createAirPlayConfig(effectiveSize).let {
+            // Over Wi-Fi a PCM-only call offer made the iPhone keep all CarPlay audio, music included, on
+            // itself (Geely KX11, iOS 27, 2026-11-18); the setting applies to wired sessions only.
+            if (config.transport == CarPlayTransport.WIRELESS && it.callAtCallRate) {
+                appendLog("Calls at the call's own rate: wired only, not offered over Wi-Fi")
+                it.copy(callAtCallRate = false)
+            } else it
+        }
         val locationProvider: Iap2LocationProvider? =
             when {
                 !config.locationReportingEnabled -> null

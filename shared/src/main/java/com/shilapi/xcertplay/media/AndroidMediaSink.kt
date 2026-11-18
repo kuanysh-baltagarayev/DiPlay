@@ -221,6 +221,8 @@ class AndroidMediaSink(
     private val navigationStreamType: Int = AudioChannelMapper.DEFAULT_NAVIGATION_STREAM_TYPE,
     onScreenStreamActiveChanged: ((Int, Boolean) -> Unit)? = null,
     private val mediaBufferMillis: Int = MediaAudioBuffer.DEFAULT_MILLIS,
+    /** Start level for calls, Siri and prompts; 0 keeps the low-latency level (see [MediaAudioBuffer.plan]). */
+    private val voiceBufferMillis: Int = 0,
     private val onAudioDiagnostic: (String) -> Unit = {},
     /** True while any music ("media") audio stream is running; called from media threads. */
     private val onMediaAudioChanged: (Boolean) -> Unit = {},
@@ -777,6 +779,7 @@ class AndroidMediaSink(
             echoReference = echoReference,
             voiceFilter = callVoiceFilter && format.audioType == TELEPHONY_AUDIO_TYPE,
         ).also {
+            it.voiceBufferMillis = voiceBufferMillis
             it.setNavigationAttenuationDb(navigationAttenuationDb)
             if (format.audioType == TELEPHONY_AUDIO_TYPE) it.onRoutedToEarpiece = { moveCallToLoudspeaker(id) }
             audioRenderers[id] = it
@@ -1830,6 +1833,8 @@ private class AudioRenderer(
     private var inputQueued = 0
     private var inputDropped = 0
     private var shortOpusPackets = 0
+    /** Start level for calls, Siri and prompts, set before [start]; 0 keeps the low-latency level. */
+    var voiceBufferMillis = 0
     private var decoderUnavailablePackets = 0
     private var outputBuffers = 0
     private var firstPcmLogged = false
@@ -2032,7 +2037,7 @@ private class AudioRenderer(
         var attributes = audioAttributesFor(selection, streamOverride)
         trackAttributes = attributes
         val plan = MediaAudioBuffer.plan(selection.channel == AudioChannel.MEDIA,
-            format.sampleRate, format.channels, minBuffer, mediaBufferMillis)
+            format.sampleRate, format.channels, minBuffer, mediaBufferMillis, voiceBufferMillis)
         bytesPerSecond = format.sampleRate * frameBytes
         val built: AudioTrack
         var routeLabel: String

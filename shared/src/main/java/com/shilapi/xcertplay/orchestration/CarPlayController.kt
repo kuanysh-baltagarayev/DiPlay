@@ -1356,7 +1356,11 @@ class CarPlayController(
             wirelessConnectionProof.begin(generation) {
                 if (!isStaleWirelessRun(generation)) startedHotspot?.onCarPlayConfirmed()
             }
-            val preferredFamily = HotspotAddressPolicy.parseFamily(
+            // Geely KX11 (2026-11-18): the iPhone's SYN to the link-local IPv6 address arrived, but the reply had
+            // no route (fe80::/64 of the hotspot and Wi-Fi Direct interfaces is in no table an ip rule reads),
+            // so a session never came up over IPv6. There IPv4 is published whenever the hotspot has a usable
+            // one (the link-local IPv6 address only without it), whatever family an earlier flip saved.
+            val preferredFamily = if (config.wirelessIpv4Only) HotspotAddressPolicy.FAMILY_IPV4 else HotspotAddressPolicy.parseFamily(
                 appContext.getSharedPreferences(WIRELESS_PREFS, Context.MODE_PRIVATE)
                     .getString(HOTSPOT_FAMILY_PREFERENCE_KEY, null),
             )
@@ -1581,9 +1585,11 @@ class CarPlayController(
                 Iap2WirelessLinkRole.RUNTIME_TUNNEL,
                 wirelessIdentification,
             )
-            val endpointAddresses = (listOf(hostAddress) + hotspotInfo.hostAddresses.filter { it != hostAddress })
-                .map { hostAddressText(it) }
-                .distinct()
+            // Only the published address where IPv6 had no route back ([CarPlayRuntimeConfig.wirelessIpv4Only]).
+            val endpointAddresses = if (config.wirelessIpv4Only) listOf(hostAddressText(hostAddress)) else
+                (listOf(hostAddress) + hotspotInfo.hostAddresses.filter { it != hostAddress })
+                    .map { hostAddressText(it) }
+                    .distinct()
             val endpoint = Iap2WirelessCarPlayEndpoint(
                 ssid = hotspotInfo.ssid,
                 passphrase = hotspotInfo.passphrase,
@@ -2910,6 +2916,8 @@ class CarPlayController(
 
     private fun flipWirelessAddressFamily(generation: Int) = synchronized(wirelessResourceLock) {
         if (isStaleWirelessRun(generation)) return@synchronized
+        // The next attempt publishes IPv4 again anyway ([CarPlayRuntimeConfig.wirelessIpv4Only]).
+        if (config.wirelessIpv4Only) return@synchronized
         val published = wirelessPublishedAddress
         val next = published?.let { wirelessAddressRecovery?.nextFamily(it) }
         val from = published?.let {
