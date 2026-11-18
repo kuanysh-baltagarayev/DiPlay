@@ -33,17 +33,39 @@ class MediaAudioBufferTest {
     }
 
     @Test
-    fun `wireless calls start with the voice delay plus headroom`() {
+    fun `wireless calls start with the call delay plus headroom`() {
         // 48 kHz mono call: 96 bytes per ms.
         val plan = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 3_840, mediaMillis = 1000,
-            voiceMillis = MediaAudioBuffer.WIRELESS_VOICE_MILLIS)
+            callMillis = MediaAudioBuffer.callMillis(wireless = true))
         assertEquals(11_520, plan.startBytes)
         assertEquals(30_720, plan.trackBufferBytes)
     }
 
     @Test
-    fun `the voice delay never undercuts the device minimum`() {
-        val plan = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 20_000, mediaMillis = 300, voiceMillis = 120)
+    fun `wired calls keep the low-latency buffer`() {
+        assertEquals(0, MediaAudioBuffer.callMillis(wireless = false))
+        val lowLatency = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 3_840, mediaMillis = 1000)
+        assertEquals(lowLatency, MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 3_840, mediaMillis = 1000,
+            callMillis = MediaAudioBuffer.callMillis(wireless = false)))
+    }
+
+    @Test
+    fun `stereo calls count both channels`() {
+        // 48 kHz stereo: 192 bytes per ms.
+        val plan = MediaAudioBuffer.plan(false, 48_000, 2, minBufferBytes = 3_840, mediaMillis = 1000, callMillis = 120)
+        assertEquals(23_040, plan.startBytes)
+        assertEquals(61_440, plan.trackBufferBytes)
+    }
+
+    @Test
+    fun `the call delay leaves music alone`() {
+        assertEquals(MediaAudioBuffer.plan(true, 48_000, 2, minBufferBytes = 7_680, mediaMillis = 500),
+            MediaAudioBuffer.plan(true, 48_000, 2, minBufferBytes = 7_680, mediaMillis = 500, callMillis = 120))
+    }
+
+    @Test
+    fun `the call delay never undercuts the device minimum`() {
+        val plan = MediaAudioBuffer.plan(false, 48_000, 1, minBufferBytes = 20_000, mediaMillis = 300, callMillis = 120)
         assertEquals(20_000, plan.startBytes)
         assertEquals(80_000, plan.trackBufferBytes)
     }
